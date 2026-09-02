@@ -17,8 +17,8 @@ describe('AI CEO workflow', () => {
   it('delegates a goal across specialist agents', () => {
     vi.spyOn(Date, 'now').mockReturnValue(123);
     const tasks = planGoal('build inventory app');
-    expect(tasks).toHaveLength(7);
-    expect(new Set(tasks.map((task) => task.agentId)).size).toBe(7);
+    expect(tasks).toHaveLength(9);
+    expect(new Set(tasks.map((task) => task.agentId)).size).toBe(9);
     expect(tasks.some((task) => task.status === 'approval')).toBe(true);
   });
   it('records the Human CEO decision', () => {

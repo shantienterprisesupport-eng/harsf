@@ -9,6 +9,7 @@ export const agents: Agent[] = [
   { id: 'qa', name: 'QA Agent', role: 'Tests & regression', status: 'ready' },
   { id: 'security', name: 'Security Agent', role: 'Threat & secret review', status: 'ready' },
   { id: 'bugfix', name: 'BugFix Agent', role: 'Diagnose and propose fixes', status: 'ready' },
+  { id: 'retest', name: 'Retest Agent', role: 'Verify fixes and regression safety', status: 'ready' },
   { id: 'review', name: 'Code Review Agent', role: 'Final diff review', status: 'ready' },
 ];
 
@@ -24,6 +25,8 @@ export function planGoal(goal: string): WorkflowTask[] {
     ['ux', 'Prepare user interface', 'medium'],
     ['developer', 'Implement code change', 'high'],
     ['qa', 'Run QA and regression tests', 'medium'],
+    ['bugfix', 'Fix discovered bugs', 'high'],
+    ['retest', 'Retest fixes and regression safety', 'medium'],
     ['security', 'Review security and secrets', 'high'],
     ['review', 'Review code and merge decision', 'critical'],
   ] as const;

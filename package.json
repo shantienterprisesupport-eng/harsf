@@ -5,12 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:full": "node scripts/dev-full.mjs",
+    "executor": "node server/local-executor.mjs",
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
     "qa": "npm run test && npm run build"
   },
   "dependencies": {
+    "@openai/codex-sdk": "latest",
     "@vitejs/plugin-react": "latest",
     "lucide-react": "latest",
     "react": "latest",

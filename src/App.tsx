@@ -1,17 +1,20 @@
 import { useMemo, useState } from 'react';
 import { Bot, Check, ChevronRight, CircleDot, GitBranch, Languages, Mic, Network, Send, ShieldCheck, Square, Users, X } from 'lucide-react';
 import { agents, decideTask, planGoal } from './core/orchestrator';
+import { executeApprovedTask, type ExecutionState } from './core/executor';
 import { mcpServers } from './core/mcp';
 import { providers } from './config/providers';
 import type { ChatMessage, WorkflowTask } from './types';
 import './index.css';
 
 type RecognitionCtor = new () => { lang: string; continuous: boolean; interimResults: boolean; start(): void; stop(): void; onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null; onend: (() => void) | null };
+type ExecutionInfo = { state: ExecutionState; message: string };
 
 export default function App() {
   const [input, setInput] = useState('');
   const [listening, setListening] = useState(false);
   const [tasks, setTasks] = useState<WorkflowTask[]>([]);
+  const [executions, setExecutions] = useState<Record<string, ExecutionInfo>>({});
   const [messages, setMessages] = useState<ChatMessage[]>([
     { id: 'welcome', author: 'ceo', text: 'Namaste! Apna app idea Hindi, Hinglish, Odia ya English mein bolo. Main team ko plan assign karunga; code aur bug-fix par final approval aapka rahega.' },
   ]);
@@ -24,6 +27,7 @@ export default function App() {
     const planned = planGoal(goal);
     setMessages((old) => [...old, { id: crypto.randomUUID(), author: 'human', text: goal }, { id: crypto.randomUUID(), author: 'ceo', text: `Goal samajh gaya. ${planned.length} tasks banaye; ${planned.filter(t => t.status === 'approval').length} decisions aapke approval mein hain.` }]);
     setTasks(planned);
+    setExecutions({});
     setInput('');
   }
 
@@ -37,8 +41,26 @@ export default function App() {
     setListening(true); recognition.start();
   }
 
+  async function runApproved(task: WorkflowTask) {
+    setExecutions((old) => ({ ...old, [task.id]: { state: 'running', message: 'Codex local executor is working…' } }));
+    try {
+      const result = await executeApprovedTask(task);
+      const summary = (result.summary || 'Approved task completed.').trim();
+      setExecutions((old) => ({ ...old, [task.id]: { state: 'done', message: 'Execution completed.' } }));
+      setMessages((old) => [...old, { id: crypto.randomUUID(), author: 'ceo', text: `${agents.find((agent) => agent.id === task.agentId)?.name ?? 'Agent'} result: ${summary.slice(0, 900)}` }]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Local executor failed.';
+      setExecutions((old) => ({ ...old, [task.id]: { state: 'failed', message } }));
+      setMessages((old) => [...old, { id: crypto.randomUUID(), author: 'ceo', text: `Approved, but execution could not start: ${message}. Run the project with npm run dev:full so the localhost Codex executor is available.` }]);
+    }
+  }
+
   function decision(id: string, approved: boolean) {
-    setTasks((old) => old.map((task) => task.id === id ? decideTask(task, approved) : task));
+    const task = tasks.find((item) => item.id === id);
+    if (!task) return;
+    const decided = decideTask(task, approved);
+    setTasks((old) => old.map((item) => item.id === id ? decided : item));
+    if (approved) void runApproved(decided);
   }
 
   return <main>
@@ -56,14 +78,14 @@ export default function App() {
         <section className="panel agents-panel"><div className="panel-title"><div><h2>Agent Team</h2><p><Users size={14}/> Live workflow roles</p></div><b>{agents.length}</b></div>
           <div className="agent-grid">{agents.map((agent) => <div className={`agent-card ${activeAgents.has(agent.id) ? 'active' : ''}`} key={agent.id}><span className="agent-dot"/><div><strong>{agent.name}</strong><small>{agent.role}</small></div></div>)}</div>
         </section>
-        <section className="panel approval"><div className="panel-title"><div><h2>Human Approval Gate</h2><p>Code, bugs, merge & deploy</p></div><b>{pending}</b></div>
-          <div className="task-list">{tasks.length === 0 ? <div className="empty"><ShieldCheck/><p>No pending decisions</p><small>AI CEO will ask before any protected action.</small></div> : tasks.map((task) => <div className="task" key={task.id}><div><span className={`status ${task.status}`}>{task.status}</span><strong>{task.title.split(':')[0]}</strong><small>{agents.find(a => a.id === task.agentId)?.name}</small></div>{task.status === 'approval' && <div className="actions"><button aria-label="Reject" onClick={() => decision(task.id, false)}><X size={15}/></button><button aria-label="Approve" className="approve" onClick={() => decision(task.id, true)}><Check size={15}/></button></div>}</div>)}</div>
+        <section className="panel approval"><div className="panel-title"><div><h2>Human Approval Gate</h2><p>Approved code actions run in local sandbox</p></div><b>{pending}</b></div>
+          <div className="task-list">{tasks.length === 0 ? <div className="empty"><ShieldCheck/><p>No pending decisions</p><small>AI CEO will ask before any protected action.</small></div> : tasks.map((task) => { const execution = executions[task.id]; return <div className="task" key={task.id}><div><span className={`status ${task.status}`}>{task.status}</span><strong>{task.title.split(':')[0]}</strong><small>{agents.find(a => a.id === task.agentId)?.name}</small>{execution && <small className={`execution ${execution.state}`}>{execution.message}</small>}</div>{task.status === 'approval' && <div className="actions"><button aria-label="Reject" onClick={() => decision(task.id, false)}><X size={15}/></button><button aria-label="Approve and execute" className="approve" onClick={() => decision(task.id, true)}><Check size={15}/></button></div>}</div>; })}</div>
         </section>
         <section className="panel connections"><div className="panel-title"><div><h2>Connected System</h2><p>Safe adapter architecture</p></div><Network size={20}/></div>{mcpServers.map((server) => <div className="connection" key={server.id}><GitBranch size={16}/><div><strong>{server.label}</strong><small>{server.permission}</small></div><ChevronRight size={15}/></div>)}</section>
       </aside>
     </div>
 
     <section className="ecosystem"><div><p className="eyebrow">MODEL ROUTER</p><h2>One orchestration layer, many AI providers</h2></div><div className="provider-grid">{providers.map((p) => <div className="provider" key={p.id}><span>{p.name.slice(0, 2).toUpperCase()}</span><div><strong>{p.name}</strong><small>{p.models.join(' · ')}</small></div><i className={p.status === 'adapter-ready' ? 'ready' : ''}>{p.status === 'adapter-ready' ? 'adapter' : 'research'}</i></div>)}</div></section>
-    <footer><span>Ruflo-ready orchestration</span><span>Human-in-the-Loop by default</span><span>No secrets stored in UI</span></footer>
+    <footer><span>Ruflo-ready orchestration</span><span>Human-in-the-Loop by default</span><span>Local Codex sandbox · network off</span></footer>
   </main>;
 }

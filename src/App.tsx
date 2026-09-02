@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Bot, Check, ChevronRight, CircleDot, GitBranch, Languages, Mic, Network, Send, ShieldCheck, Square, X } from 'lucide-react';
+import { Bot, Check, ChevronRight, CircleDot, GitBranch, Languages, Mic, Network, Send, ShieldCheck, Square, Users, X } from 'lucide-react';
 import { agents, decideTask, planGoal } from './core/orchestrator';
 import { mcpServers } from './core/mcp';
 import { providers } from './config/providers';
@@ -16,6 +16,7 @@ export default function App() {
     { id: 'welcome', author: 'ceo', text: 'Namaste! Apna app idea Hindi, Hinglish, Odia ya English mein bolo. Main team ko plan assign karunga; code aur bug-fix par final approval aapka rahega.' },
   ]);
   const pending = useMemo(() => tasks.filter((task) => task.status === 'approval').length, [tasks]);
+  const activeAgents = useMemo(() => new Set(tasks.map((task) => task.agentId)), [tasks]);
 
   function submit() {
     const goal = input.trim();
@@ -52,6 +53,9 @@ export default function App() {
       </section>
 
       <aside className="stack">
+        <section className="panel agents-panel"><div className="panel-title"><div><h2>Agent Team</h2><p><Users size={14}/> Live workflow roles</p></div><b>{agents.length}</b></div>
+          <div className="agent-grid">{agents.map((agent) => <div className={`agent-card ${activeAgents.has(agent.id) ? 'active' : ''}`} key={agent.id}><span className="agent-dot"/><div><strong>{agent.name}</strong><small>{agent.role}</small></div></div>)}</div>
+        </section>
         <section className="panel approval"><div className="panel-title"><div><h2>Human Approval Gate</h2><p>Code, bugs, merge & deploy</p></div><b>{pending}</b></div>
           <div className="task-list">{tasks.length === 0 ? <div className="empty"><ShieldCheck/><p>No pending decisions</p><small>AI CEO will ask before any protected action.</small></div> : tasks.map((task) => <div className="task" key={task.id}><div><span className={`status ${task.status}`}>{task.status}</span><strong>{task.title.split(':')[0]}</strong><small>{agents.find(a => a.id === task.agentId)?.name}</small></div>{task.status === 'approval' && <div className="actions"><button aria-label="Reject" onClick={() => decision(task.id, false)}><X size={15}/></button><button aria-label="Approve" className="approve" onClick={() => decision(task.id, true)}><Check size={15}/></button></div>}</div>)}</div>
         </section>

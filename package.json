@@ -8,7 +8,10 @@
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "qa": "npm run test && npm run build"
+    "qa": "npm run test && npm run build",
+    "api": "node runtime/api.mjs",
+    "worker": "node runtime/worker.mjs",
+    "autopilot": "node runtime/start.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",

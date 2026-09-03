@@ -1,6 +1,11 @@
 import http from 'node:http';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { enqueueTask, readQueue } from './queue.mjs';
 
+const execFileAsync = promisify(execFile);
 const host = '127.0.0.1';
 const port = Number(process.env.HARSF_API_PORT || 8787);
 
@@ -24,6 +29,31 @@ async function readBody(req) {
   return text ? JSON.parse(text) : {};
 }
 
+async function repositoryStatus() {
+  const cwd = process.cwd();
+  const [branchResult, statusResult, entries] = await Promise.all([
+    execFileAsync('git', ['branch', '--show-current'], { cwd, windowsHide: true }).catch(() => ({ stdout: 'unknown' })),
+    execFileAsync('git', ['status', '--short'], { cwd, windowsHide: true }).catch(() => ({ stdout: '' })),
+    fs.readdir(cwd, { withFileTypes: true }),
+  ]);
+
+  const visibleEntries = entries
+    .filter((entry) => !['node_modules', 'dist', '.git', '.harsf-runtime'].includes(entry.name))
+    .map((entry) => entry.name)
+    .sort()
+    .slice(0, 20);
+
+  const changed = String(statusResult.stdout || '').trim();
+  return {
+    ok: true,
+    branch: String(branchResult.stdout || 'unknown').trim() || 'unknown',
+    clean: changed.length === 0,
+    changes: changed ? changed.split(/\r?\n/).slice(0, 30) : [],
+    rootEntries: visibleEntries,
+    cwd: path.basename(cwd),
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return json(res, 204, {});
   const url = new URL(req.url || '/', `http://${host}:${port}`);
@@ -31,6 +61,10 @@ const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'GET' && url.pathname === '/api/health') {
       return json(res, 200, { ok: true, service: 'harsf-runtime' });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/repository-status') {
+      return json(res, 200, await repositoryStatus());
     }
 
     if (req.method === 'GET' && url.pathname === '/api/tasks') {

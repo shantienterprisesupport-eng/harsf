@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Bot, Check, ChevronRight, CircleDot, GitBranch, Languages, Mic, Network, Send, ShieldCheck, Square, X } from 'lucide-react';
-import { advanceWorkflow, agents, decideTask, planGoal } from './core/orchestrator';
+import { agents, decideTask, planGoal } from './core/orchestrator';
 import { mcpServers } from './core/mcp';
 import { providers } from './config/providers';
 import type { ChatMessage, WorkflowTask } from './types';
 import './index.css';
 
 type RecognitionCtor = new () => { lang: string; continuous: boolean; interimResults: boolean; start(): void; stop(): void; onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null; onend: (() => void) | null };
+type BackendTask = { id: string; status: string; result?: string; blocker?: string; phase?: string };
+type RepositoryStatus = { branch: string; clean: boolean; changes: string[]; rootEntries: string[]; cwd: string };
+
+const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+const readOnlyRequest = /(read.?only|inspect|status|current branch|repository.*read|repo.*read|koi file change mat|no file change|don't change|do not change)/i;
 
 export default function App() {
   const [input, setInput] = useState('');
@@ -33,32 +38,79 @@ export default function App() {
     return () => { active = false; window.clearInterval(timer); };
   }, []);
 
-  useEffect(() => {
-    if (!tasks.some((task) => task.status === 'running')) return;
-    const timer = window.setTimeout(() => {
-      setTasks((current) => advanceWorkflow(current));
-    }, 900);
-    return () => window.clearTimeout(timer);
-  }, [tasks]);
+  function addCeo(text: string) {
+    setMessages((old) => [...old, { id: crypto.randomUUID(), author: 'ceo', text }]);
+  }
 
-  function submit() {
+  async function showRepositoryStatus() {
+    const response = await fetch('/api/repository-status');
+    if (!response.ok) throw new Error(`Repository status failed (${response.status})`);
+    const status = await response.json() as RepositoryStatus;
+    const changes = status.clean ? 'Working tree clean hai.' : `Changes:\n${status.changes.join('\n')}`;
+    addCeo(`REAL REPOSITORY STATUS\nBranch: ${status.branch}\nFolder: ${status.cwd}\n${changes}\nRoot: ${status.rootEntries.join(', ')}`);
+  }
+
+  async function waitForBackendTask(id: string) {
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      await sleep(1000);
+      const response = await fetch('/api/tasks');
+      if (!response.ok) continue;
+      const data = await response.json() as { tasks?: BackendTask[] };
+      const task = data.tasks?.find((item) => item.id === id);
+      if (!task) continue;
+
+      if (task.status === 'done') {
+        addCeo(task.result || 'AI Agent ka task successfully complete hua.');
+        return;
+      }
+      if (task.status === 'blocked') {
+        addCeo(`BLOCKED: ${task.blocker || 'Unknown blocker'}\n${task.result || ''}`.trim());
+        return;
+      }
+      if (task.status === 'failed') {
+        addCeo(`FAILED:\n${task.result || 'Task failed without details.'}`);
+        return;
+      }
+    }
+    addCeo('Task backend mein abhi bhi chal raha hai. /api/tasks mein progress available hai.');
+  }
+
+  async function submit() {
     const goal = input.trim();
     if (!goal) return;
-    const planned = planGoal(goal);
-    setMessages((old) => [...old, { id: crypto.randomUUID(), author: 'human', text: goal }, { id: crypto.randomUUID(), author: 'ceo', text: `Goal samajh gaya. Autopilot ne ${planned.length} tasks banaye. Safe tasks khud chalenge; ${planned.filter(t => t.status === 'approval').length} protected decision Human CEO ke liye reserve hai.` }]);
-    setTasks(planned);
+
+    setMessages((old) => [...old, { id: crypto.randomUUID(), author: 'human', text: goal }]);
     setInput('');
 
-    void fetch('/api/goals', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ goal }),
-    }).catch(() => setRuntimeOnline(false));
+    try {
+      if (readOnlyRequest.test(goal)) {
+        await showRepositoryStatus();
+        return;
+      }
+
+      const planned = planGoal(goal);
+      setTasks(planned);
+
+      const response = await fetch('/api/goals', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ goal }),
+      });
+      if (!response.ok) throw new Error(`Goal API failed (${response.status})`);
+      const data = await response.json() as { task?: BackendTask };
+      if (!data.task?.id) throw new Error('Backend ne task id return nahi ki.');
+
+      addCeo(`Real backend task queued: ${data.task.id}. AI worker ab model + QA workflow chala raha hai.`);
+      void waitForBackendTask(data.task.id);
+    } catch (error) {
+      setRuntimeOnline(false);
+      addCeo(`Backend error: ${String(error)}`);
+    }
   }
 
   function voice() {
     const Ctor = (window as typeof window & { webkitSpeechRecognition?: RecognitionCtor; SpeechRecognition?: RecognitionCtor }).SpeechRecognition ?? (window as typeof window & { webkitSpeechRecognition?: RecognitionCtor }).webkitSpeechRecognition;
-    if (!Ctor) { setMessages((old) => [...old, { id: crypto.randomUUID(), author: 'ceo', text: 'Is browser mein voice input available nahi hai. Text box mein likh sakte hain.' }]); return; }
+    if (!Ctor) { addCeo('Is browser mein voice input available nahi hai. Text box mein likh sakte hain.'); return; }
     const recognition = new Ctor();
     recognition.lang = 'hi-IN'; recognition.continuous = false; recognition.interimResults = false;
     recognition.onresult = (event) => setInput(event.results[0][0].transcript);
@@ -78,7 +130,7 @@ export default function App() {
       <section className="chat panel">
         <div className="panel-title"><div><h2>CEO Chat</h2><p><Languages size={14}/> Odia · Hindi · Hinglish · English</p></div><span className="live">{runtimeOnline ? 'AUTOPILOT' : 'UI'}</span></div>
         <div className="messages">{messages.map((m) => <div key={m.id} className={`message ${m.author}`}><span>{m.author === 'ceo' ? 'AI CEO' : 'YOU'}</span>{m.text}</div>)}</div>
-        <div className="composer"><textarea aria-label="App idea" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }} placeholder="Jaise: Mere liye ek local shop inventory app banao…"/><button className={`voice ${listening ? 'active' : ''}`} aria-label="Voice input" onClick={voice}>{listening ? <Square size={18}/> : <Mic size={20}/>}</button><button className="send" aria-label="Send" onClick={submit}><Send size={20}/></button></div>
+        <div className="composer"><textarea aria-label="App idea" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Jaise: Mere liye ek local shop inventory app banao…"/><button className={`voice ${listening ? 'active' : ''}`} aria-label="Voice input" onClick={voice}>{listening ? <Square size={18}/> : <Mic size={20}/>}</button><button className="send" aria-label="Send" onClick={() => void submit()}><Send size={20}/></button></div>
       </section>
 
       <aside className="stack">

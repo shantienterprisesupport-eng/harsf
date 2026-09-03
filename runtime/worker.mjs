@@ -10,8 +10,16 @@ const SAFE_COMMANDS = {
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function runCommand(rawCommand, args) {
-  const command = process.platform === 'win32' && rawCommand === 'npm' ? 'npm.cmd' : rawCommand;
+function windowsSafeCommand(command, args) {
+  if (process.platform === 'win32' && command === 'npm') {
+    const comspec = process.env.ComSpec || 'C:\\Windows\\System32\\cmd.exe';
+    return { command: comspec, args: ['/d', '/s', '/c', `npm ${args.join(' ')}`] };
+  }
+  return { command, args };
+}
+
+function runCommand(rawCommand, rawArgs) {
+  const { command, args } = windowsSafeCommand(rawCommand, rawArgs);
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd: process.cwd(),

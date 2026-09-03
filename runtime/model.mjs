@@ -87,6 +87,8 @@ export async function generateCodeEdits(goal, qaFeedback = '') {
     body: JSON.stringify({
       model,
       temperature: 0.2,
+      thinking: { type: 'disabled' },
+      response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user },

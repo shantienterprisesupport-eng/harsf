@@ -2,7 +2,6 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const children = [];
 
 function loadEnvFile() {
@@ -25,7 +24,16 @@ function loadEnvFile() {
   return true;
 }
 
-function start(command, args, label) {
+function windowsSafeCommand(command, args) {
+  if (process.platform === 'win32' && command === 'npm') {
+    const comspec = process.env.ComSpec || 'C:\\Windows\\System32\\cmd.exe';
+    return { command: comspec, args: ['/d', '/s', '/c', `npm ${args.join(' ')}`] };
+  }
+  return { command, args };
+}
+
+function start(rawCommand, rawArgs, label) {
+  const { command, args } = windowsSafeCommand(rawCommand, rawArgs);
   const child = spawn(command, args, {
     cwd: process.cwd(),
     stdio: 'inherit',
@@ -34,6 +42,7 @@ function start(command, args, label) {
     env: process.env,
   });
   children.push(child);
+  child.on('error', (error) => console.error(`[${label}] failed to start: ${error.message}`));
   child.on('exit', (code) => {
     if (code && code !== 0) console.error(`[${label}] stopped with code ${code}`);
   });
@@ -45,7 +54,7 @@ console.log(`HARSF AUTOPILOT starting... | local config: ${envLoaded ? 'loaded' 
 if (!envLoaded) console.log('Run SETUP-HARSF.cmd once to configure the local model connection.');
 start(process.execPath, ['runtime/api.mjs'], 'api');
 start(process.execPath, ['runtime/worker.mjs'], 'worker');
-start(npm, ['run', 'dev'], 'ui');
+start('npm', ['run', 'dev'], 'ui');
 
 function stop() {
   for (const child of children) {

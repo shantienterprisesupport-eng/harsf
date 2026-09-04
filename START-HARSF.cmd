@@ -1,23 +1,22 @@
 @echo off
-cd /d %~dp0
+setlocal EnableExtensions EnableDelayedExpansion
+cd /d "%~dp0"
 title HARSF AUTOPILOT
 
 set "HARSF_BRANCH=ai/autopilot-orchestrator-v1"
+set "CURRENT_BRANCH="
+set "WORKTREE_DIRTY=0"
 
 if exist ".git" (
   for /f "delims=" %%B in ('git branch --show-current 2^>nul') do set "CURRENT_BRANCH=%%B"
-  if /I "%CURRENT_BRANCH%"=="%HARSF_BRANCH%" (
-    git diff --quiet >nul 2>&1
-    set "WORKTREE_DIRTY=%ERRORLEVEL%"
-    git diff --cached --quiet >nul 2>&1
-    if not "%ERRORLEVEL%"=="0" set "WORKTREE_DIRTY=1"
-
-    if "%WORKTREE_DIRTY%"=="0" (
+  if /I "!CURRENT_BRANCH!"=="%HARSF_BRANCH%" (
+    for /f "delims=" %%S in ('git status --porcelain 2^>nul') do set "WORKTREE_DIRTY=1"
+    if "!WORKTREE_DIRTY!"=="0" (
       echo Checking for the latest safe HARSF update...
       git fetch origin %HARSF_BRANCH% >nul 2>&1
-      if "%ERRORLEVEL%"=="0" (
+      if !ERRORLEVEL! EQU 0 (
         git merge --ff-only FETCH_HEAD >nul 2>&1
-        if "%ERRORLEVEL%"=="0" (
+        if !ERRORLEVEL! EQU 0 (
           echo HARSF code is up to date.
         ) else (
           echo Auto-update skipped; current code will start safely.
@@ -29,7 +28,7 @@ if exist ".git" (
       echo Local code changes detected; auto-update skipped to protect your work.
     )
   ) else (
-    echo Current branch is %CURRENT_BRANCH%; auto-update skipped.
+    echo Current branch is !CURRENT_BRANCH!; auto-update skipped.
   )
 )
 

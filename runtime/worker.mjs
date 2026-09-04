@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
-import { enqueueTask, readQueue, updateTask } from './queue.mjs';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { readQueue, updateTask } from './queue.mjs';
 import { applyEdits, generateCodeEdits, modelConfigured, rollbackEdits, smokeTestModel } from './model.mjs';
 
 const SAFE_COMMANDS = {
@@ -9,6 +11,12 @@ const SAFE_COMMANDS = {
 };
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const heartbeatFile = path.join(process.cwd(), '.harsf-runtime', 'worker-heartbeat.json');
+
+async function heartbeat() {
+  await fs.mkdir(path.dirname(heartbeatFile), { recursive: true });
+  await fs.writeFile(heartbeatFile, JSON.stringify({ pid: process.pid, updatedAt: new Date().toISOString() }), 'utf8');
+}
 
 function windowsSafeCommand(command, args) {
   if (process.platform === 'win32' && command === 'npm') {
@@ -56,7 +64,7 @@ async function runSelfTest(task) {
         status: 'failed',
         phase: 'qa-failed',
         finishedAt: new Date().toISOString(),
-        result: `Startup self-test: model OK, QA failed.\n${qa.output.slice(-6000)}`,
+        result: `Self-test: model OK, QA failed.\n${qa.output.slice(-6000)}`,
       });
       return;
     }
@@ -164,12 +172,8 @@ async function handleTask(task) {
 }
 
 console.log(`[HARSF worker] online | model adapter: ${modelConfigured() ? 'configured' : 'waiting for configuration'}`);
-const startupTasks = await readQueue();
-const activeSelfTest = startupTasks.some((task) => task.type === 'selftest' && ['queued', 'running'].includes(task.status));
-if (!activeSelfTest) {
-  await enqueueTask({ type: 'selftest', source: 'startup' });
-  console.log('[HARSF worker] startup self-test queued');
-}
+await heartbeat();
+setInterval(() => void heartbeat().catch((error) => console.warn('[HARSF worker] heartbeat warning:', error.message)), 2000);
 
 while (true) {
   const tasks = await readQueue();

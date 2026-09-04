@@ -21,7 +21,7 @@ export interface WorkflowTask {
   title: string;
   agentId: string;
   risk: Risk;
-  status: 'queued' | 'running' | 'approval' | 'approved' | 'rejected';
+  status: 'queued' | 'running' | 'approval' | 'approved' | 'rejected' | 'done';
   reason?: string;
 }
 

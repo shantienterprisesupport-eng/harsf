@@ -1,10 +1,11 @@
-import { mkdir, open, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, writeFile, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 
 const runtimeDir = path.join(process.cwd(), '.harsf-runtime');
 const queueFile = path.join(runtimeDir, 'queue.json');
 const lockFile = path.join(runtimeDir, 'queue.lock');
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const STALE_LOCK_MS = 15000;
 
 async function ensureStore() {
   await mkdir(runtimeDir, { recursive: true });
@@ -36,15 +37,30 @@ async function readQueueUnlocked() {
   throw lastError || new Error('Unable to read HARSF queue.');
 }
 
+async function clearStaleLock() {
+  try {
+    const info = await stat(lockFile);
+    if (Date.now() - info.mtimeMs > STALE_LOCK_MS) {
+      await unlink(lockFile);
+      console.warn('[HARSF queue] removed stale queue lock.');
+      return true;
+    }
+  } catch (error) {
+    if (error?.code === 'ENOENT') return true;
+  }
+  return false;
+}
+
 async function withQueueLock(fn) {
   await ensureStore();
   let handle = null;
-  for (let attempt = 0; attempt < 200; attempt += 1) {
+  for (let attempt = 0; attempt < 240; attempt += 1) {
     try {
       handle = await open(lockFile, 'wx');
       break;
     } catch (error) {
       if (error?.code !== 'EEXIST') throw error;
+      await clearStaleLock();
       await sleep(25);
     }
   }
@@ -55,8 +71,7 @@ async function withQueueLock(fn) {
   } finally {
     try { await handle.close(); } catch {}
     try {
-      const fs = await import('node:fs/promises');
-      await fs.unlink(lockFile);
+      await unlink(lockFile);
     } catch (error) {
       if (error?.code !== 'ENOENT') console.warn('[HARSF queue] lock cleanup warning:', error.message);
     }

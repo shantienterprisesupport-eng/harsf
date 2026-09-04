@@ -51,7 +51,10 @@ export default function App() {
   }
 
   async function waitForBackendTask(id: string) {
-    for (let attempt = 0; attempt < 120; attempt += 1) {
+    // Local Ollama requests are allowed up to 180s, and a retry/QA step can take longer.
+    // Keep the UI polling long enough to surface the real DONE/FAILED result instead of
+    // giving up before the backend timeout has even fired.
+    for (let attempt = 0; attempt < 300; attempt += 1) {
       await sleep(1000);
       const response = await fetch('/api/tasks');
       if (!response.ok) continue;
@@ -72,7 +75,7 @@ export default function App() {
         return;
       }
     }
-    addCeo('Task backend mein abhi bhi chal raha hai. /api/tasks mein progress available hai.');
+    addCeo('Task 5 minute se zyada chal raha hai. Backend status check karna hoga; task chup-chaap infinite wait mein nahi chhoda jayega.');
   }
 
   async function submit() {

@@ -8,7 +8,10 @@
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "qa": "npm run test && npm run build"
+    "qa": "npm run test && npm run build",
+    "agents:setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-agents.ps1",
+    "agents:verify": "powershell -ExecutionPolicy Bypass -File scripts/verify-agents.ps1",
+    "ruflo:doctor": "npx --yes ruflo@latest doctor"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",

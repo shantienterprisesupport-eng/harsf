@@ -16,4 +16,14 @@ foreach ($process in $targets) {
   } catch {}
 }
 
+# A force-stopped process can leave the queue lock behind. Remove only this
+# HARSF-owned transient lock so the fresh worker/API can start immediately.
+$lockFile = Join-Path (Split-Path $PSScriptRoot -Parent) '.harsf-runtime\queue.lock'
+if (Test-Path $lockFile) {
+  try {
+    Remove-Item $lockFile -Force -ErrorAction Stop
+    Write-Host 'Removed stale HARSF queue lock.' -ForegroundColor DarkGray
+  } catch {}
+}
+
 Start-Sleep -Milliseconds 700

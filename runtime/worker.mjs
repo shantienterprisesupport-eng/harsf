@@ -53,6 +53,52 @@ function runSafeCommand(type) {
   return runCommand(command, args);
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function findWhitespaceTolerantMatch(text, needle) {
+  const trimmed = String(needle || '').trim();
+  if (!trimmed) return null;
+  const tokens = trimmed.split(/\s+/).map(escapeRegExp);
+  const matcher = new RegExp(tokens.join('\\s+'), 'g');
+  const matches = [...text.matchAll(matcher)];
+  if (matches.length !== 1) return null;
+  return matches[0][0];
+}
+
+async function normalizePatchEdits(edits) {
+  const root = process.cwd();
+  const normalized = [];
+
+  for (const edit of edits) {
+    if (typeof edit.find !== 'string') {
+      normalized.push(edit);
+      continue;
+    }
+
+    let current;
+    try {
+      current = await fs.readFile(path.join(root, edit.path), 'utf8');
+    } catch {
+      normalized.push(edit);
+      continue;
+    }
+
+    const first = current.indexOf(edit.find);
+    const exactUnique = first !== -1 && current.indexOf(edit.find, first + edit.find.length) === -1;
+    if (exactUnique) {
+      normalized.push(edit);
+      continue;
+    }
+
+    const tolerant = findWhitespaceTolerantMatch(current, edit.find);
+    normalized.push(tolerant ? { ...edit, find: tolerant } : edit);
+  }
+
+  return normalized;
+}
+
 async function runSelfTest(task) {
   try {
     await updateTask(task.id, { status: 'running', phase: 'model-smoke', result: 'Checking local AI model...' });
@@ -95,7 +141,8 @@ async function runCodingGoal(task) {
   }
 
   let feedback = '';
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     await updateTask(task.id, { status: 'running', phase: `coding-attempt-${attempt}` });
     let backups = [];
     try {
@@ -105,7 +152,8 @@ async function runCodingGoal(task) {
         return;
       }
 
-      backups = await applyEdits(proposal.edits);
+      const normalizedEdits = await normalizePatchEdits(proposal.edits);
+      backups = await applyEdits(normalizedEdits);
       await updateTask(task.id, { phase: 'qa', result: `${proposal.summary}\nRunning QA...` });
       const qa = await runSafeCommand('qa');
       if (qa.ok) {
@@ -114,7 +162,7 @@ async function runCodingGoal(task) {
           phase: 'complete',
           finishedAt: new Date().toISOString(),
           result: `${proposal.summary}\n\nQA PASSED\n${qa.output.slice(-6000)}`,
-          files: proposal.edits.map((edit) => edit.path),
+          files: normalizedEdits.map((edit) => edit.path),
         });
         return;
       }
@@ -125,12 +173,27 @@ async function runCodingGoal(task) {
       await updateTask(task.id, { phase: 'bugfix', result: `QA failed on attempt ${attempt}; changes rolled back safely. BugFix Agent preparing retry.` });
     } catch (error) {
       if (backups.length) await rollbackEdits(backups);
-      if (String(error).includes('MODEL_ADAPTER_REQUIRED')) {
-        await updateTask(task.id, { status: 'blocked', blocker: 'MODEL_ADAPTER_REQUIRED', result: String(error) });
+      const errorText = String(error);
+      if (errorText.includes('MODEL_ADAPTER_REQUIRED')) {
+        await updateTask(task.id, { status: 'blocked', blocker: 'MODEL_ADAPTER_REQUIRED', result: errorText });
         return;
       }
-      feedback = String(error);
-      if (attempt === 2) {
+
+      const patchMismatch = errorText.includes('Patch text not found') || errorText.includes('Patch text is not unique');
+      feedback = patchMismatch
+        ? `${errorText}\nPATCH RECOVERY REQUIRED: the previous find text did not exactly match the repository. Do not reuse that find string. On the next attempt use a much smaller unique find copied character-for-character from CURRENT REPOSITORY SNAPSHOT, or return complete file content when the entire target file is visible. Keep the edit minimal.`
+        : errorText;
+
+      if (attempt < maxAttempts) {
+        await updateTask(task.id, {
+          phase: patchMismatch ? 'patch-recovery' : 'bugfix',
+          result: patchMismatch
+            ? `Patch mismatch on attempt ${attempt}; safe recovery retry is preparing an exact repository match.`
+            : `Attempt ${attempt} failed safely; BugFix Agent preparing retry.`,
+        });
+      }
+
+      if (attempt === maxAttempts) {
         await updateTask(task.id, { status: 'failed', finishedAt: new Date().toISOString(), result: feedback });
         return;
       }
@@ -140,7 +203,7 @@ async function runCodingGoal(task) {
   await updateTask(task.id, {
     status: 'failed',
     finishedAt: new Date().toISOString(),
-    result: `Two safe coding attempts failed. No failing code was kept.\n${feedback.slice(-8000)}`,
+    result: `Safe coding attempts failed. No failing code was kept.\n${feedback.slice(-8000)}`,
   });
 }
 

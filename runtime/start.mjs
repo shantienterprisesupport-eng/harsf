@@ -2,7 +2,8 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const children = [];
+const children = new Map();
+let stopping = false;
 
 function loadEnvFile() {
   const envPath = path.join(process.cwd(), '.env');
@@ -32,7 +33,7 @@ function windowsSafeCommand(command, args) {
   return { command, args };
 }
 
-function start(rawCommand, rawArgs, label) {
+function launch(rawCommand, rawArgs, label, { restart = false } = {}) {
   const { command, args } = windowsSafeCommand(rawCommand, rawArgs);
   const child = spawn(command, args, {
     cwd: process.cwd(),
@@ -41,26 +42,43 @@ function start(rawCommand, rawArgs, label) {
     windowsHide: false,
     env: process.env,
   });
-  children.push(child);
+
+  children.set(label, child);
+  console.log(`[HARSF] ${label} started (pid ${child.pid ?? 'unknown'})`);
+
   child.on('error', (error) => console.error(`[${label}] failed to start: ${error.message}`));
-  child.on('exit', (code) => {
-    if (code && code !== 0) console.error(`[${label}] stopped with code ${code}`);
+  child.on('exit', (code, signal) => {
+    children.delete(label);
+    if (stopping) return;
+    console.error(`[${label}] stopped (code ${code ?? 'null'}, signal ${signal ?? 'none'})`);
+    if (restart) {
+      console.log(`[HARSF] restarting ${label} in 1 second...`);
+      setTimeout(() => {
+        if (!stopping) launch(rawCommand, rawArgs, label, { restart: true });
+      }, 1000);
+    }
   });
+
   return child;
 }
 
 const envLoaded = loadEnvFile();
 console.log(`HARSF AUTOPILOT starting... | local config: ${envLoaded ? 'loaded' : 'not found'}`);
 if (!envLoaded) console.log('Run SETUP-HARSF.cmd once to configure the local model connection.');
-start(process.execPath, ['runtime/api.mjs'], 'api');
-start(process.execPath, ['runtime/worker.mjs'], 'worker');
-start('npm', ['run', 'dev'], 'ui');
+
+// API and worker are supervised. If either crashes, HARSF brings it back automatically
+// instead of silently leaving the browser UI running without a backend.
+launch(process.execPath, ['runtime/api.mjs'], 'api', { restart: true });
+launch(process.execPath, ['runtime/worker.mjs'], 'worker', { restart: true });
+launch('npm', ['run', 'dev'], 'ui');
 
 function stop() {
-  for (const child of children) {
+  if (stopping) return;
+  stopping = true;
+  for (const child of children.values()) {
     if (!child.killed) child.kill();
   }
-  process.exit(0);
+  setTimeout(() => process.exit(0), 200);
 }
 
 process.on('SIGINT', stop);

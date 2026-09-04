@@ -2,10 +2,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const MAX_SNAPSHOT_CHARS = 60_000;
-const LOCAL_SNAPSHOT_CHARS = 14_000;
 const MAX_EDITS = 10;
 const MAX_FILE_CHARS = 80_000;
 const MAX_PATCH_CHARS = 20_000;
+const LOCAL_WORKSPACE = 'src/generated/WorkspaceApp.tsx';
 const ALLOWED_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.css', '.json', '.md']);
 
 export function modelConfigured() {
@@ -66,6 +66,17 @@ async function buildSnapshot(limit = MAX_SNAPSHOT_CHARS) {
   return parts.join('');
 }
 
+async function buildLocalWorkspaceSnapshot() {
+  const root = process.cwd();
+  let text = '';
+  try {
+    text = await fs.readFile(path.join(root, LOCAL_WORKSPACE), 'utf8');
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+  return `\n--- FILE: ${LOCAL_WORKSPACE} ---\n${text}\n`;
+}
+
 function parseJsonContent(content) {
   const trimmed = String(content || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   const parsed = JSON.parse(trimmed);
@@ -92,6 +103,17 @@ function parseJsonContent(content) {
   });
 
   return { summary: String(parsed.summary || 'Model prepared code edits.'), edits };
+}
+
+function validateLocalWorkspaceProposal(proposal) {
+  if (proposal.edits.length !== 1) {
+    throw new Error('LOCAL_WORKSPACE_EDIT_REQUIRED: return exactly one complete-file edit.');
+  }
+  const edit = proposal.edits[0];
+  if (edit.path !== LOCAL_WORKSPACE || typeof edit.content !== 'string') {
+    throw new Error(`LOCAL_WORKSPACE_EDIT_REQUIRED: replace ${LOCAL_WORKSPACE} using complete file content only; do not use find/replace.`);
+  }
+  return proposal;
 }
 
 export async function smokeTestModel() {
@@ -144,21 +166,35 @@ export async function generateCodeEdits(goal, qaFeedback = '') {
   const key = process.env.HARSF_MODEL_API_KEY;
   const model = process.env.HARSF_MODEL_NAME;
   const local = isLocalOllama(endpoint);
-  const snapshot = await buildSnapshot(local ? LOCAL_SNAPSHOT_CHARS : MAX_SNAPSHOT_CHARS);
+  const snapshot = local ? await buildLocalWorkspaceSnapshot() : await buildSnapshot();
 
-  const system = [
-    'You are the HARSF Developer Agent working on a React/TypeScript repository.',
-    'Return JSON only.',
-    'Preferred shape for small edits: {"summary":"...","edits":[{"path":"src/...","find":"exact existing text","replace":"replacement text"}]}.',
-    'You may use {"path":"src/...","content":"complete file content"} only when a whole-file replacement is truly necessary.',
-    'Only edit files under src/. Never request shell commands, secrets, deployment, git operations, package installation, or destructive actions.',
-    'Keep edits minimal and ensure TypeScript/build/tests should pass. For find/replace, copy the find text exactly from the snapshot and make it unique.',
-  ].join(' ');
+  const system = local
+    ? [
+        'You are the HARSF Local Developer Agent.',
+        'Build the user requested app inside one isolated React/TypeScript workspace file.',
+        `You MUST return JSON only in exactly this shape: {"summary":"...","edits":[{"path":"${LOCAL_WORKSPACE}","content":"COMPLETE FILE CONTENT"}]}.`,
+        `Only edit ${LOCAL_WORKSPACE}. Never edit App.tsx or any other file.`,
+        'Never use find/replace patches. Always return the complete WorkspaceApp.tsx file.',
+        'The file must export default function WorkspaceApp().',
+        'Make it a useful interactive app for the goal using React state when helpful.',
+        'Do not install packages and do not import third-party libraries. React hooks from react are allowed.',
+        'Keep the code compact, valid TSX, and self-contained. Use inline styles if styling is needed.',
+        'Do not use shell commands, secrets, deployment, git operations, destructive actions, or network calls.',
+      ].join(' ')
+    : [
+        'You are the HARSF Developer Agent working on a React/TypeScript repository.',
+        'Return JSON only.',
+        'Preferred shape for small edits: {"summary":"...","edits":[{"path":"src/...","find":"exact existing text","replace":"replacement text"}]}.',
+        'You may use {"path":"src/...","content":"complete file content"} only when a whole-file replacement is truly necessary.',
+        'Only edit files under src/. Never request shell commands, secrets, deployment, git operations, package installation, or destructive actions.',
+        'Keep edits minimal and ensure TypeScript/build/tests should pass. For find/replace, copy the find text exactly from the snapshot and make it unique.',
+      ].join(' ');
+
   const user = `GOAL:\n${goal}\n\n${qaFeedback ? `PREVIOUS QA FAILURE:\n${qaFeedback.slice(-6000)}\n\n` : ''}CURRENT REPOSITORY SNAPSHOT:${snapshot}`;
 
   const body = {
     model,
-    temperature: 0.1,
+    temperature: local ? 0 : 0.1,
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: user },
@@ -196,7 +232,8 @@ export async function generateCodeEdits(goal, qaFeedback = '') {
   const data = await response.json();
   const content = data?.choices?.[0]?.message?.content;
   if (!content) throw new Error('Model API returned no message content.');
-  return parseJsonContent(content);
+  const proposal = parseJsonContent(content);
+  return local ? validateLocalWorkspaceProposal(proposal) : proposal;
 }
 
 export async function applyEdits(edits) {

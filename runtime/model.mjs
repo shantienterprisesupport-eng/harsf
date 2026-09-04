@@ -105,15 +105,28 @@ function parseJsonContent(content) {
   return { summary: String(parsed.summary || 'Model prepared code edits.'), edits };
 }
 
-function validateLocalWorkspaceProposal(proposal) {
-  if (proposal.edits.length !== 1) {
-    throw new Error('LOCAL_WORKSPACE_EDIT_REQUIRED: return exactly one complete-file edit.');
+function parseLocalWorkspaceContent(content) {
+  const raw = String(content || '').trim();
+  if (!raw) throw new Error('Local model returned no TSX content.');
+
+  const fenced = raw.match(/```(?:tsx|typescript|ts|jsx|javascript|js)?\s*\n?([\s\S]*?)```/i);
+  let code = (fenced ? fenced[1] : raw).trim();
+
+  if (!fenced) {
+    const candidates = [code.indexOf('import '), code.indexOf('export default function WorkspaceApp')]
+      .filter((index) => index >= 0);
+    if (candidates.length) code = code.slice(Math.min(...candidates)).trim();
   }
-  const edit = proposal.edits[0];
-  if (edit.path !== LOCAL_WORKSPACE || typeof edit.content !== 'string') {
-    throw new Error(`LOCAL_WORKSPACE_EDIT_REQUIRED: replace ${LOCAL_WORKSPACE} using complete file content only; do not use find/replace.`);
+
+  if (code.length > MAX_FILE_CHARS) throw new Error(`Edit too large: ${LOCAL_WORKSPACE}`);
+  if (!/export\s+default\s+function\s+WorkspaceApp\s*\(/.test(code)) {
+    throw new Error('LOCAL_WORKSPACE_EDIT_REQUIRED: return complete TSX with `export default function WorkspaceApp()` and no explanation.');
   }
-  return proposal;
+
+  return {
+    summary: 'Local Developer Agent generated the isolated app workspace.',
+    edits: [{ path: LOCAL_WORKSPACE, content: code }],
+  };
 }
 
 export async function smokeTestModel() {
@@ -171,12 +184,11 @@ export async function generateCodeEdits(goal, qaFeedback = '') {
   const system = local
     ? [
         'You are the HARSF Local Developer Agent.',
-        'Build the user requested app inside one isolated React/TypeScript workspace file.',
-        `You MUST return JSON only in exactly this shape: {"summary":"...","edits":[{"path":"${LOCAL_WORKSPACE}","content":"COMPLETE FILE CONTENT"}]}.`,
-        `Only edit ${LOCAL_WORKSPACE}. Never edit App.tsx or any other file.`,
-        'Never use find/replace patches. Always return the complete WorkspaceApp.tsx file.',
-        'The file must export default function WorkspaceApp().',
-        'Make it a useful interactive app for the goal using React state when helpful.',
+        'Build the requested app inside one isolated React/TypeScript workspace file.',
+        'Return ONLY the complete TSX source code. Do not return JSON. Do not use markdown fences. Do not add explanations before or after the code.',
+        'The source MUST define and export exactly: export default function WorkspaceApp().',
+        `You are replacing only ${LOCAL_WORKSPACE}; never edit App.tsx or any other file.`,
+        'Make a useful interactive app for the goal using React state when helpful.',
         'Do not install packages and do not import third-party libraries. React hooks from react are allowed.',
         'Keep the code compact, valid TSX, and self-contained. Use inline styles if styling is needed.',
         'Do not use shell commands, secrets, deployment, git operations, destructive actions, or network calls.',
@@ -190,7 +202,8 @@ export async function generateCodeEdits(goal, qaFeedback = '') {
         'Keep edits minimal and ensure TypeScript/build/tests should pass. For find/replace, copy the find text exactly from the snapshot and make it unique.',
       ].join(' ');
 
-  const user = `GOAL:\n${goal}\n\n${qaFeedback ? `PREVIOUS QA FAILURE:\n${qaFeedback.slice(-6000)}\n\n` : ''}CURRENT REPOSITORY SNAPSHOT:${snapshot}`;
+  const feedbackLabel = local ? 'PREVIOUS BUILD/QA FAILURE' : 'PREVIOUS QA FAILURE';
+  const user = `GOAL:\n${goal}\n\n${qaFeedback ? `${feedbackLabel}:\n${qaFeedback.slice(-6000)}\n\n` : ''}CURRENT REPOSITORY SNAPSHOT:${snapshot}`;
 
   const body = {
     model,
@@ -201,7 +214,9 @@ export async function generateCodeEdits(goal, qaFeedback = '') {
     ],
   };
 
-  if (!local) {
+  if (local) {
+    body.max_tokens = 2500;
+  } else {
     body.thinking = { type: 'disabled' };
     body.response_format = { type: 'json_object' };
   }
@@ -232,8 +247,7 @@ export async function generateCodeEdits(goal, qaFeedback = '') {
   const data = await response.json();
   const content = data?.choices?.[0]?.message?.content;
   if (!content) throw new Error('Model API returned no message content.');
-  const proposal = parseJsonContent(content);
-  return local ? validateLocalWorkspaceProposal(proposal) : proposal;
+  return local ? parseLocalWorkspaceContent(content) : parseJsonContent(content);
 }
 
 export async function applyEdits(edits) {

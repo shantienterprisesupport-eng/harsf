@@ -4,7 +4,7 @@ Set-Location (Split-Path $PSScriptRoot -Parent)
 Write-Host ''
 Write-Host 'HARSF FREE LOCAL MODEL SETUP' -ForegroundColor Cyan
 Write-Host 'Default provider: Ollama local (no paid API balance required)'
-Write-Host 'Model: qwen2.5-coder:3b-instruct'
+Write-Host 'Model: qwen2.5-coder:0.5b'
 Write-Host ''
 
 $ollama = Get-Command ollama -ErrorAction SilentlyContinue
@@ -15,7 +15,7 @@ if (-not $ollama) {
   exit 2
 }
 
-$model = 'qwen2.5-coder:3b-instruct'
+$model = 'qwen2.5-coder:0.5b'
 Write-Host "Preparing free local coding model: $model" -ForegroundColor Cyan
 & ollama pull $model
 if ($LASTEXITCODE -ne 0) {

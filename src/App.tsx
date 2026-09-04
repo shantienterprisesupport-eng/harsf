@@ -4,6 +4,7 @@ import { agents, decideTask, planGoal } from './core/orchestrator';
 import { mcpServers } from './core/mcp';
 import { providers } from './config/providers';
 import type { ChatMessage, WorkflowTask } from './types';
+import WorkspaceApp from './generated/WorkspaceApp';
 import './index.css';
 
 type RecognitionCtor = new () => { lang: string; continuous: boolean; interimResults: boolean; start(): void; stop(): void; onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null; onend: (() => void) | null };
@@ -51,9 +52,6 @@ export default function App() {
   }
 
   async function waitForBackendTask(id: string) {
-    // Local Ollama requests are allowed up to 180s, and a retry/QA step can take longer.
-    // Keep the UI polling long enough to surface the real DONE/FAILED result instead of
-    // giving up before the backend timeout has even fired.
     for (let attempt = 0; attempt < 300; attempt += 1) {
       await sleep(1000);
       const response = await fetch('/api/tasks');
@@ -143,6 +141,8 @@ export default function App() {
         <section className="panel connections"><div className="panel-title"><div><h2>Connected System</h2><p>Safe adapter architecture</p></div><Network size={20}/></div>{mcpServers.map((server) => <div className="connection" key={server.id}><GitBranch size={16}/><div><strong>{server.label}</strong><small>{server.permission}</small></div><ChevronRight size={15}/></div>)}</section>
       </aside>
     </div>
+
+    <WorkspaceApp />
 
     <section className="ecosystem"><div><p className="eyebrow">MODEL ROUTER</p><h2>One orchestration layer, many AI providers</h2></div><div className="provider-grid">{providers.map((p) => <div className="provider" key={p.id}><span>{p.name.slice(0, 2).toUpperCase()}</span><div><strong>{p.name}</strong><small>{p.models.join(' · ')}</small></div><i className={p.status === 'adapter-ready' ? 'ready' : ''}>{p.status === 'adapter-ready' ? 'adapter' : 'research'}</i></div>)}</div></section>
     <footer><span>Ruflo-ready orchestration</span><span>{runtimeOnline ? 'Background runtime online' : 'Start with START-HARSF.cmd'}</span><span>No secrets stored in UI</span></footer>

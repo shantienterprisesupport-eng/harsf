@@ -1,0 +1,46 @@
+name: Agent Stack Smoke Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - 'praison/**'
+      - 'package.json'
+      - '.github/workflows/agents-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-agent-stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify Ruflo CLI installs
+        run: npx --yes ruflo@latest --version
+
+      - name: Install PraisonAI
+        run: python -m pip install praisonai
+
+      - name: Verify PraisonAI import
+        run: python -c "import praisonaiagents; print('PraisonAI import OK')"
+
+      - name: Existing HARSF QA
+        run: |
+          npm ci
+          npm run qa

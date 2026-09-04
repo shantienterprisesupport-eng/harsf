@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
-import { readQueue, updateTask } from './queue.mjs';
-import { applyEdits, generateCodeEdits, modelConfigured, rollbackEdits } from './model.mjs';
+import { enqueueTask, readQueue, updateTask } from './queue.mjs';
+import { applyEdits, generateCodeEdits, modelConfigured, rollbackEdits, smokeTestModel } from './model.mjs';
 
 const SAFE_COMMANDS = {
   test: ['npm', ['run', 'test']],
@@ -43,6 +43,37 @@ function runCommand(rawCommand, rawArgs) {
 function runSafeCommand(type) {
   const [command, args] = SAFE_COMMANDS[type];
   return runCommand(command, args);
+}
+
+async function runSelfTest(task) {
+  try {
+    await updateTask(task.id, { status: 'running', phase: 'model-smoke', result: 'Checking local AI model...' });
+    const modelReply = await smokeTestModel();
+    await updateTask(task.id, { phase: 'qa', result: `Local model replied: ${modelReply}. Running QA...` });
+    const qa = await runSafeCommand('qa');
+    if (!qa.ok) {
+      await updateTask(task.id, {
+        status: 'failed',
+        phase: 'qa-failed',
+        finishedAt: new Date().toISOString(),
+        result: `Startup self-test: model OK, QA failed.\n${qa.output.slice(-6000)}`,
+      });
+      return;
+    }
+    await updateTask(task.id, {
+      status: 'done',
+      phase: 'complete',
+      finishedAt: new Date().toISOString(),
+      result: 'AUTOPILOT VERIFIED: local Ollama model + HARSF worker + QA are working.',
+    });
+  } catch (error) {
+    await updateTask(task.id, {
+      status: 'failed',
+      phase: 'self-test-failed',
+      finishedAt: new Date().toISOString(),
+      result: `AUTOPILOT SELF-TEST FAILED: ${String(error)}`,
+    });
+  }
 }
 
 async function runCodingGoal(task) {
@@ -108,6 +139,11 @@ async function runCodingGoal(task) {
 async function handleTask(task) {
   await updateTask(task.id, { status: 'running', startedAt: new Date().toISOString() });
 
+  if (task.type === 'selftest') {
+    await runSelfTest(task);
+    return;
+  }
+
   if (task.type === 'goal') {
     await runCodingGoal(task);
     return;
@@ -128,9 +164,16 @@ async function handleTask(task) {
 }
 
 console.log(`[HARSF worker] online | model adapter: ${modelConfigured() ? 'configured' : 'waiting for configuration'}`);
+const startupTasks = await readQueue();
+const activeSelfTest = startupTasks.some((task) => task.type === 'selftest' && ['queued', 'running'].includes(task.status));
+if (!activeSelfTest) {
+  await enqueueTask({ type: 'selftest', source: 'startup' });
+  console.log('[HARSF worker] startup self-test queued');
+}
+
 while (true) {
   const tasks = await readQueue();
-  const next = tasks.find((task) => task.status === 'queued');
+  const next = tasks.find((task) => task.type === 'selftest' && task.status === 'queued') || tasks.find((task) => task.status === 'queued');
   if (next) {
     try {
       await handleTask(next);

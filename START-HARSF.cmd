@@ -9,6 +9,9 @@ if not exist ".env" (
   exit /b 1
 )
 
+echo Cleaning old HARSF processes...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0runtime\stop-stale.ps1"
+
 echo Starting HARSF with saved local configuration...
 node --env-file=.env runtime\start.mjs
 pause

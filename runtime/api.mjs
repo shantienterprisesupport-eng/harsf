@@ -54,13 +54,26 @@ async function repositoryStatus() {
   };
 }
 
+async function latestSelfTest() {
+  const tasks = await readQueue();
+  const task = [...tasks].reverse().find((item) => item.type === 'selftest');
+  if (!task) return null;
+  return {
+    id: task.id,
+    status: task.status,
+    phase: task.phase || null,
+    result: task.result || null,
+    updatedAt: task.updatedAt || null,
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return json(res, 204, {});
   const url = new URL(req.url || '/', `http://${host}:${port}`);
 
   try {
     if (req.method === 'GET' && url.pathname === '/api/health') {
-      return json(res, 200, { ok: true, service: 'harsf-runtime' });
+      return json(res, 200, { ok: true, service: 'harsf-runtime', selfTest: await latestSelfTest() });
     }
 
     if (req.method === 'GET' && url.pathname === '/api/repository-status') {
@@ -75,14 +88,18 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const goal = String(body.goal || '').trim();
       if (!goal) return json(res, 400, { error: 'goal is required' });
+      if (/^autopilot\s+test$/i.test(goal)) {
+        const task = await enqueueTask({ type: 'selftest', source: 'manual' });
+        return json(res, 202, { task });
+      }
       const task = await enqueueTask({ type: 'goal', goal });
       return json(res, 202, { task });
     }
 
     if (req.method === 'POST' && url.pathname === '/api/tasks') {
       const body = await readBody(req);
-      const allowed = new Set(['test', 'build', 'qa']);
-      if (!allowed.has(body.type)) return json(res, 400, { error: 'Only test, build, or qa tasks are allowed.' });
+      const allowed = new Set(['test', 'build', 'qa', 'selftest']);
+      if (!allowed.has(body.type)) return json(res, 400, { error: 'Only test, build, qa, or selftest tasks are allowed.' });
       const task = await enqueueTask({ type: body.type });
       return json(res, 202, { task });
     }

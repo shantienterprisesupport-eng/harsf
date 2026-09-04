@@ -43,7 +43,6 @@ async function buildSnapshot(limit = MAX_SNAPSHOT_CHARS) {
   const files = [];
   await walk(path.join(root, 'src'), root, files);
 
-  // Put the main UI files first so a tiny local model sees the most useful context.
   const priority = ['src/App.tsx', 'src/App.css', 'src/main.tsx', 'src/types.ts'];
   files.sort((a, b) => {
     const ai = priority.indexOf(a);
@@ -95,6 +94,50 @@ function parseJsonContent(content) {
   return { summary: String(parsed.summary || 'Model prepared code edits.'), edits };
 }
 
+export async function smokeTestModel() {
+  if (!modelConfigured()) throw new Error('MODEL_ADAPTER_REQUIRED');
+  const endpoint = process.env.HARSF_MODEL_API_URL;
+  const key = process.env.HARSF_MODEL_API_KEY;
+  const model = process.env.HARSF_MODEL_NAME;
+  const local = isLocalOllama(endpoint);
+  const timeoutMs = local ? 60_000 : 30_000;
+
+  let response;
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        max_tokens: 8,
+        messages: [
+          { role: 'system', content: 'You are a health check. Reply with READY only.' },
+          { role: 'user', content: 'READY?' },
+        ],
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+      throw new Error(`Model smoke test timed out after ${Math.round(timeoutMs / 1000)}s.`);
+    }
+    throw error;
+  }
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Model API ${response.status}: ${text.slice(0, 500)}`);
+  }
+  const data = await response.json();
+  const content = String(data?.choices?.[0]?.message?.content || '').trim();
+  if (!content) throw new Error('Model smoke test returned no message content.');
+  return content;
+}
+
 export async function generateCodeEdits(goal, qaFeedback = '') {
   if (!modelConfigured()) throw new Error('MODEL_ADAPTER_REQUIRED');
   const endpoint = process.env.HARSF_MODEL_API_URL;
@@ -122,8 +165,6 @@ export async function generateCodeEdits(goal, qaFeedback = '') {
     ],
   };
 
-  // Cloud adapters can use their structured-output controls. Tiny local Ollama models
-  // are more reliable when given the simpler OpenAI-compatible payload.
   if (!local) {
     body.thinking = { type: 'disabled' };
     body.response_format = { type: 'json_object' };

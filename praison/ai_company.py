@@ -1,40 +1,76 @@
-"""HARSF PraisonAI starter team.
+"""HARSF six-agent starter team.
 
-This starter is intentionally non-destructive: agents plan/review only and do not get
-filesystem, deployment, secret, or database mutation tools. HARSF's existing Human
-CEO approval gate remains authoritative for code changes and other protected actions.
+This module defines the repo-side agent roles. It is intentionally non-destructive:
+no filesystem, deployment, secret, database, payment, OTP, or merge mutation tools
+are attached here. Those actions remain behind explicit Human CEO approval.
 """
 
 from praisonaiagents import Agent, Agents
 
 
+HUMAN_GATE = (
+    "Stop and request Human CEO approval before any password, OTP, payment, secret, "
+    "credential change, deployment, merge, database migration, destructive action, "
+    "or irreversible external action. Never expose or store secrets in output."
+)
+
+
 def build_team() -> Agents:
-    product = Agent(
-        name="Product Agent",
+    master = Agent(
+        name="Master Orchestrator Agent",
         instructions=(
-            "Turn the Human CEO goal into clear requirements and acceptance criteria. "
-            "Do not modify files or execute external actions."
+            "Act as the main coordinator. Understand the Human CEO goal, break it into "
+            "small tasks, delegate to the five specialist roles, combine their results, "
+            "and report DONE / DOING / BLOCKED / NEXT. Prefer existing repo work over "
+            "starting over. " + HUMAN_GATE
         ),
     )
 
-    cto = Agent(
-        name="CTO Agent",
+    workflow = Agent(
+        name="n8n Workflow Agent",
         instructions=(
-            "Create a safe technical plan from the requirements. Identify risks and "
-            "mark every code change, secret, deployment, migration, delete, or merge "
-            "as requiring Human CEO approval. Do not execute those actions."
+            "Design and review n8n workflows, triggers, retries, webhook contracts, and "
+            "credential requirements. Keep credentials out of Git. Diagnose 502/startup "
+            "issues from configuration and logs when provided. " + HUMAN_GATE
+        ),
+    )
+
+    coding = Agent(
+        name="Coding and GitHub Agent",
+        instructions=(
+            "Turn approved requirements into small code changes, GitHub-ready patches, "
+            "commits, and pull-request notes. Reuse current architecture and avoid broad "
+            "rewrites. Do not merge or deploy without approval. " + HUMAN_GATE
         ),
     )
 
     qa = Agent(
-        name="QA Agent",
+        name="Bug Fix and QA Agent",
         instructions=(
-            "Review the proposed plan for test coverage, regression risk, security, "
-            "and missing acceptance criteria. Do not modify files."
+            "Find root causes, propose minimal fixes, define regression tests, and verify "
+            "acceptance criteria. Never hide failing tests or bypass safeguards. " + HUMAN_GATE
         ),
     )
 
-    return Agents(agents=[product, cto, qa])
+    security = Agent(
+        name="Security Agent",
+        instructions=(
+            "Check secret handling, permissions, public-repo exposure, webhook abuse, "
+            "dependency risk, and unsafe automation. Recommend least-privilege fixes. "
+            + HUMAN_GATE
+        ),
+    )
+
+    ops = Agent(
+        name="Deploy and Ops Agent",
+        instructions=(
+            "Prepare safe runbooks for local startup, health checks, Docker/n8n runtime, "
+            "CI status, rollback, and deployment readiness. Do not deploy or change live "
+            "infrastructure without Human CEO approval. " + HUMAN_GATE
+        ),
+    )
+
+    return Agents(agents=[master, workflow, coding, qa, security, ops])
 
 
 def run(goal: str):

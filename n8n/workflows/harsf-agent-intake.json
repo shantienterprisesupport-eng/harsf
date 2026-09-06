@@ -1,0 +1,75 @@
+{
+  "name": "HARSF Six-Agent Intake",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "harsf-agent",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "f4c1ee62-30f8-41bb-8809-760b47a17601",
+      "name": "Agent Intake",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "harsf-six-agent-intake"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nconst text = String(body.goal ?? body.task ?? body.message ?? '').trim();\nif (!text) {\n  return [{ json: { ok: false, error: 'goal/task/message is required' } }];\n}\n\nconst lower = text.toLowerCase();\nconst approvalWords = ['otp','password','api key','secret','payment','pay','merge','deploy','delete','migration','database change','credential'];\nconst needsHumanApproval = approvalWords.some((word) => lower.includes(word));\n\nlet agent = 'Master Orchestrator Agent';\nif (/n8n|workflow|webhook|automation|502/.test(lower)) agent = 'n8n Workflow Agent';\nelse if (/code|github|commit|pull request|pr|typescript|python|react/.test(lower)) agent = 'Coding and GitHub Agent';\nelse if (/bug|error|test|qa|regression|fail/.test(lower)) agent = 'Bug Fix and QA Agent';\nelse if (/security|permission|secret|credential|token|vulnerability/.test(lower)) agent = 'Security Agent';\nelse if (/docker|deploy|server|ops|health|runtime|ci|build/.test(lower)) agent = 'Deploy and Ops Agent';\n\nreturn [{\n  json: {\n    ok: true,\n    goal: text,\n    assignedAgent: agent,\n    status: needsHumanApproval ? 'BLOCKED_FOR_HUMAN_APPROVAL' : 'READY',\n    humanApprovalRequired: needsHumanApproval,\n    next: needsHumanApproval\n      ? 'Ask the Human CEO before the protected action.'\n      : 'Pass this task to the selected agent or AI model node.'\n  }\n}];"
+      },
+      "id": "bf6d4c8d-47c4-48f5-9671-68368f933ca2",
+      "name": "Safe Router",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "c0ec8709-4ed9-474c-94df-a4a738c709f9",
+      "name": "Return Routing Decision",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [520, 0]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Agent Intake": {
+      "main": [
+        [
+          {
+            "node": "Safe Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Safe Router": {
+      "main": [
+        [
+          {
+            "node": "Return Routing Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "5ece2b95-f9bb-49b8-a154-0237c9e981d7",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

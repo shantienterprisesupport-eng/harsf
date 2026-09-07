@@ -6,7 +6,7 @@ import { providers } from './config/providers';
 import type { ChatMessage, WorkflowTask } from './types';
 import './index.css';
 
-type RecognitionCtor = new () => { lang: string; continuous: boolean; interimResults: boolean; start(): void; stop(): void; onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null; onend: (() => void) => void };
+type RecognitionCtor = new () => { lang: string; continuous: boolean; interimResults: boolean; start(): void; stop(): void; onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null; onend: (() => void) | null };
 
 const aiGatewayUrl = `${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8787'}/api/ceo-chat`;
 

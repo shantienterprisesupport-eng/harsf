@@ -7,7 +7,7 @@ Human-CEO-controlled multi-agent software factory. A user can describe an app in
 - Responsive voice/text CEO chat interface
 - AI CEO task planner for Product, CTO, UI/UX, Developer, Database, QA, Security, BugFix, and Code Review agents
 - Human approval queue and approve/reject decisions
-- Provider registry/adapters for Claude, DeepSeek, Grok, Alibaba/Qwen, Zhipu/GLM, Moonshot/Kimi, MiniMax, HyperCLOVA X, Solar, and research-only providers
+- Provider registry/adapters for OpenAI/ChatGPT (Codex/GPT), Claude, DeepSeek, Grok, Alibaba/Qwen, Zhipu/GLM, Moonshot/Kimi, MiniMax, HyperCLOVA X, Solar, and research-only providers
 - MCP connection contract for scoped local Git, GitHub, and vector memory
 - Unit tests for approval policy and agent delegation
 

@@ -17,6 +17,9 @@ if not exist node_modules (
   if errorlevel 1 goto :error
 )
 
+echo Starting secure AI gateway...
+start "HARSF AI Gateway" /min cmd /k "cd /d ""%~dp0"" && npm run ai:gateway"
+
 echo Starting HARSF...
 echo Open the local address shown below in your browser.
 call npm run dev -- --host 127.0.0.1

@@ -6,7 +6,9 @@ import { providers } from './config/providers';
 import type { ChatMessage, WorkflowTask } from './types';
 import './index.css';
 
-type RecognitionCtor = new () => { lang: string; continuous: boolean; interimResults: boolean; start(): void; stop(): void; onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null; onend: (() => void) | null };
+type RecognitionCtor = new () => { lang: string; continuous: boolean; interimResults: boolean; start(): void; stop(): void; onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null; onend: (() => void) => void };
+
+const aiGatewayUrl = `${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8787'}/api/ceo-chat`;
 
 export default function App() {
   const [input, setInput] = useState('');
@@ -17,13 +19,30 @@ export default function App() {
   ]);
   const pending = useMemo(() => tasks.filter((task) => task.status === 'approval').length, [tasks]);
 
-  function submit() {
+  async function askAiCeo(goal: string, fallback: string) {
+    try {
+      const response = await fetch(aiGatewayUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: goal }),
+      });
+      const result = await response.json() as { text?: string };
+      return response.ok && result.text ? result.text : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  async function submit() {
     const goal = input.trim();
     if (!goal) return;
     const planned = planGoal(goal);
-    setMessages((old) => [...old, { id: crypto.randomUUID(), author: 'human', text: goal }, { id: crypto.randomUUID(), author: 'ceo', text: `Goal samajh gaya. ${planned.length} tasks banaye; ${planned.filter(t => t.status === 'approval').length} decisions aapke approval mein hain.` }]);
+    const fallback = `Goal samajh gaya. ${planned.length} tasks banaye; ${planned.filter(t => t.status === 'approval').length} decisions aapke approval mein hain.`;
+    setMessages((old) => [...old, { id: crypto.randomUUID(), author: 'human', text: goal }]);
     setTasks(planned);
     setInput('');
+    const reply = await askAiCeo(goal, fallback);
+    setMessages((old) => [...old, { id: crypto.randomUUID(), author: 'ceo', text: reply }]);
   }
 
   function voice() {
@@ -48,7 +67,7 @@ export default function App() {
       <section className="chat panel">
         <div className="panel-title"><div><h2>CEO Chat</h2><p><Languages size={14}/> Odia · Hindi · Hinglish · English</p></div><span className="live">LIVE</span></div>
         <div className="messages">{messages.map((m) => <div key={m.id} className={`message ${m.author}`}><span>{m.author === 'ceo' ? 'AI CEO' : 'YOU'}</span>{m.text}</div>)}</div>
-        <div className="composer"><textarea aria-label="App idea" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }} placeholder="Jaise: Mere liye ek local shop inventory app banao…"/><button className={`voice ${listening ? 'active' : ''}`} aria-label="Voice input" onClick={voice}>{listening ? <Square size={18}/> : <Mic size={20}/>}</button><button className="send" aria-label="Send" onClick={submit}><Send size={20}/></button></div>
+        <div className="composer"><textarea aria-label="App idea" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Jaise: Mere liye ek local shop inventory app banao…"/><button className={`voice ${listening ? 'active' : ''}`} aria-label="Voice input" onClick={voice}>{listening ? <Square size={18}/> : <Mic size={20}/>}</button><button className="send" aria-label="Send" onClick={() => void submit()}><Send size={20}/></button></div>
       </section>
 
       <aside className="stack">

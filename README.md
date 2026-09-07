@@ -13,7 +13,11 @@ Human-CEO-controlled multi-agent software factory. A user can describe an app in
 
 Provider names in the UI mean the integration boundary is implemented, not that credentials or commercial access have been granted. Sakana AI, Rakuten, ELYZA, CyberAgent, VARCO, and EXAONE are marked research-only until a supported hosted API and authorization are supplied.
 
-## Run
+## Run on Windows
+
+Double-click `START-HARSF.cmd`. It checks for Node.js, installs the project packages on first run, and starts the HARSF web app locally. It does not use the old `runtime/start.mjs` starter.
+
+## Manual run
 
 ```bash
 npm install

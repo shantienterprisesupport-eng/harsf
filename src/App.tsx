@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Bot, Check, ChevronRight, CircleDot, GitBranch, Languages, Mic, Network, Send, ShieldCheck, Square, X } from 'lucide-react';
 import { agents, decideTask, planGoal } from './core/orchestrator';
 import { mcpServers } from './core/mcp';
@@ -8,15 +8,24 @@ import './index.css';
 
 type RecognitionCtor = new () => { lang: string; continuous: boolean; interimResults: boolean; start(): void; stop(): void; onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null; onend: (() => void) | null };
 
-const aiGatewayUrl = `${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8787'}/api/ceo-chat`;
+const aiGatewayBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8787';
+const aiGatewayUrl = `${aiGatewayBaseUrl}/api/ceo-chat`;
 
 export default function App() {
   const [input, setInput] = useState('');
   const [listening, setListening] = useState(false);
+  const [gatewayReady, setGatewayReady] = useState<boolean | null>(null);
   const [tasks, setTasks] = useState<WorkflowTask[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([
     { id: 'welcome', author: 'ceo', text: 'Namaste! Apna app idea Hindi, Hinglish, Odia ya English mein bolo. Main team ko plan assign karunga; code aur bug-fix par final approval aapka rahega.' },
   ]);
+  useEffect(() => {
+    fetch(`${aiGatewayBaseUrl}/health`)
+      .then((response) => response.json())
+      .then((data: { configured?: boolean }) => setGatewayReady(Boolean(data.configured)))
+      .catch(() => setGatewayReady(false));
+  }, []);
+
   const pending = useMemo(() => tasks.filter((task) => task.status === 'approval').length, [tasks]);
 
   async function askAiCeo(goal: string, fallback: string) {
@@ -61,11 +70,11 @@ export default function App() {
 
   return <main>
     <header className="topbar"><div className="brand"><span className="brandmark"><Bot size={22}/></span><div><strong>HARSF</strong><small>Autonomous AI Company</small></div></div><div className="human"><ShieldCheck size={16}/> Human CEO Control</div></header>
-    <section className="hero"><div className="eyebrow"><CircleDot size={13}/> AI CEO online</div><h1>Idea bolo. AI company<br/><span>plan aur build karegi.</span></h1><p>Simple language se multi-agent software workflow — every code decision stays under your approval.</p></section>
+    <section className="hero"><div className="eyebrow"><CircleDot size={13}/> {gatewayReady === null ? 'Checking AI connection…' : gatewayReady ? 'AI CEO connected' : 'Planning mode — AI key not connected'}</div><h1>Idea bolo. AI company<br/><span>plan aur build karegi.</span></h1><p>Simple language se multi-agent software workflow — every code decision stays under your approval.</p></section>
 
     <div className="layout">
       <section className="chat panel">
-        <div className="panel-title"><div><h2>CEO Chat</h2><p><Languages size={14}/> Odia · Hindi · Hinglish · English</p></div><span className="live">LIVE</span></div>
+        <div className="panel-title"><div><h2>CEO Chat</h2><p><Languages size={14}/> Odia · Hindi · Hinglish · English</p></div><span className="live">{gatewayReady ? 'AI READY' : 'PLAN MODE'}</span></div>
         <div className="messages">{messages.map((m) => <div key={m.id} className={`message ${m.author}`}><span>{m.author === 'ceo' ? 'AI CEO' : 'YOU'}</span>{m.text}</div>)}</div>
         <div className="composer"><textarea aria-label="App idea" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Jaise: Mere liye ek local shop inventory app banao…"/><button className={`voice ${listening ? 'active' : ''}`} aria-label="Voice input" onClick={voice}>{listening ? <Square size={18}/> : <Mic size={20}/>}</button><button className="send" aria-label="Send" onClick={() => void submit()}><Send size={20}/></button></div>
       </section>

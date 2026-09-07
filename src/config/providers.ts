@@ -1,6 +1,7 @@
 import type { Provider } from '../types';
 
 export const providers: Provider[] = [
+  { id: 'openai', name: 'OpenAI / ChatGPT', models: ['Codex', 'GPT'], status: 'adapter-ready', env: 'OPENAI_API_KEY' },
   { id: 'claude', name: 'Claude', models: ['Claude'], status: 'adapter-ready', env: 'ANTHROPIC_API_KEY' },
   { id: 'deepseek', name: 'DeepSeek', models: ['V4-Pro', 'V4-Flash'], status: 'adapter-ready', env: 'DEEPSEEK_API_KEY' },
   { id: 'grok', name: 'xAI Grok', models: ['Grok 4'], status: 'adapter-ready', env: 'XAI_API_KEY' },

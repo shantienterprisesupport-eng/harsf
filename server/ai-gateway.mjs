@@ -34,6 +34,7 @@ const xaiModel = process.env.XAI_MODEL || 'grok-4.6';
 const omniRouteBaseUrl = normalizeHttpBaseUrl(process.env.OMNIROUTE_BASE_URL || 'http://127.0.0.1:20128/v1');
 const omniRouteModel = (process.env.OMNIROUTE_MODEL || '').trim();
 const requestedProvider = (process.env.AI_PROVIDER || 'auto').toLowerCase();
+let appDraftBusy = false;
 
 const systemPrompt = `You are HARSF Master AI Assistant for a Human CEO.
 Reply in the user's language (Hindi, Hinglish, Odia, or English) and adapt naturally to each message. Do not repeat a canned answer.
@@ -45,7 +46,7 @@ Read-only inspection, planning, summarization, isolated app-draft creation, and 
 Require explicit Human CEO approval before payments or purchases, credentials/secrets/API keys, tracked-repository code changes, database migrations, destructive actions, sending external messages, merging, publishing, or deployment.
 If an integration is not connected, say exactly what is missing. Prefer concrete next work over generic advice and avoid unnecessary questions.`;
 
-const protectedExecution = /(password|passcode|otp|api[ _-]?key|access[ _-]?token|secret|credential|payment|purchase|\bbuy\b|\bpay\b|delete|destroy|wipe|format|merge|deploy|production|database migration|db migration|send money)/i;
+const protectedExecution = /(password|passcode|otp|api[ _-]?key|access[ _-]?token|secret|credential|payment|purchase|\bbuy\b|\bpay\b|delete|destroy|wipe|format|merge|deploy|publish|production|database migration|db migration|send money)/i;
 const appBuildIntent = /(app|website|web app|software|dashboard|portal)/i;
 const createIntent = /(banao|bana do|banana|build|create|make|develop|ready karo|taiyar karo)/i;
 
@@ -87,6 +88,21 @@ function missingCredential(provider) {
   if (provider === 'deepseek') return 'DEEPSEEK_API_KEY';
   if (provider === 'xai') return 'XAI_API_KEY';
   return 'a configured OmniRoute route or one direct AI provider credential';
+}
+
+function providerExecutionEnv(provider) {
+  if (provider === 'omniroute') {
+    return {
+      PRAISONAI_MODEL: omniRouteModel,
+      OPENAI_BASE_URL: omniRouteBaseUrl,
+      OPENAI_API_KEY: process.env.OMNIROUTE_API_KEY || 'local-omniroute',
+    };
+  }
+  if (provider === 'anthropic') return { PRAISONAI_MODEL: `anthropic/${anthropicModel}` };
+  if (provider === 'openai') return { PRAISONAI_MODEL: openAiModel };
+  if (provider === 'deepseek') return { PRAISONAI_MODEL: `deepseek/${deepSeekModel}` };
+  if (provider === 'xai') return { PRAISONAI_MODEL: `xai/${xaiModel}` };
+  return {};
 }
 
 function json(response, status, payload) {
@@ -158,13 +174,16 @@ function safeProcessOutput(text) {
     .slice(-6000);
 }
 
-function runNpmScript(script, extraArgs = [], timeoutMs = 600_000) {
+function runNpmScript(script, extraArgs = [], timeoutMs = 600_000, extraEnv = {}) {
   return new Promise((resolvePromise) => {
-    const executable = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-    const child = spawn(executable, ['run', script, ...(extraArgs.length ? ['--', ...extraArgs] : [])], {
+    const npmArgs = ['run', script, ...(extraArgs.length ? ['--', ...extraArgs] : [])];
+    const npmCli = process.env.npm_execpath;
+    const executable = npmCli ? process.execPath : process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    const args = npmCli ? [npmCli, ...npmArgs] : npmArgs;
+    const child = spawn(executable, args, {
       cwd: repoRoot,
       shell: false,
-      env: process.env,
+      env: { ...process.env, ...extraEnv },
       windowsHide: true,
     });
 
@@ -199,54 +218,69 @@ function runNpmScript(script, extraArgs = [], timeoutMs = 600_000) {
 }
 
 async function buildAppDraft(goal) {
+  if (goal.length > 2000) {
+    return { status: 413, payload: { error: 'App build request is too large. Keep the command under 2000 characters.' } };
+  }
   if (!appBuildIntent.test(goal) || !createIntent.test(goal)) {
     return { status: 400, payload: { error: 'This endpoint accepts only clear new-app build requests.' } };
   }
   if (protectedExecution.test(goal)) {
     return { status: 409, payload: { error: 'Protected action detected. Human CEO approval is required before merge/deploy/secret/payment/destructive execution.' } };
   }
-  if (!providerCandidates().length) {
+  const candidates = providerCandidates();
+  if (!candidates.length) {
     return { status: 503, payload: { error: 'App draft needs a connected model provider. Configure OmniRoute or one direct provider first.' } };
   }
   if (!existsSync(resolve(repoRoot, 'praison', 'app_builder_tools.py'))) {
     return { status: 503, payload: { error: 'HARSF app-draft tools are missing from this local checkout. Pull the latest main branch first.' } };
   }
-
-  const before = new Set(listDraftFiles());
-  const routed = await runNpmScript('ruflo:orchestrate', [goal], 300_000);
-  if (!routed.ok) {
-    return {
-      status: routed.code === 2 ? 409 : 502,
-      payload: {
-        error: routed.code === 2 ? 'Ruflo stopped at the Human CEO approval gate.' : 'Ruflo could not prepare the app build handoff.',
-        details: safeProcessOutput(`${routed.stdout}\n${routed.stderr}`),
-      },
-    };
+  if (appDraftBusy) {
+    return { status: 409, payload: { error: 'Another app draft is already running. Wait for it to finish before starting another.' } };
   }
 
-  const built = await runNpmScript('agents:run:handoff', [], 900_000);
-  if (!built.ok) {
+  const provider = candidates[0];
+  appDraftBusy = true;
+  try {
+    const before = new Set(listDraftFiles());
+    const routed = await runNpmScript('ruflo:orchestrate', [goal], 300_000);
+    if (!routed.ok) {
+      return {
+        status: routed.code === 2 ? 409 : 502,
+        payload: {
+          error: routed.code === 2 ? 'Ruflo stopped at the Human CEO approval gate.' : 'Ruflo could not prepare the app build handoff.',
+          details: safeProcessOutput(`${routed.stdout}\n${routed.stderr}`),
+        },
+      };
+    }
+
+    const built = await runNpmScript('agents:run:handoff', [], 900_000, providerExecutionEnv(provider));
+    if (!built.ok) {
+      return {
+        status: 502,
+        payload: {
+          error: `App agent handoff could not finish through ${provider}. Check the configured model/provider and PraisonAI setup.`,
+          details: safeProcessOutput(`${built.stdout}\n${built.stderr}`),
+        },
+      };
+    }
+
+    const after = listDraftFiles();
+    const createdOrChanged = after.filter((path) => !before.has(path));
     return {
-      status: 502,
+      status: 200,
       payload: {
-        error: 'App agent handoff could not finish. Check the configured model/provider and PraisonAI setup.',
-        details: safeProcessOutput(`${built.stdout}\n${built.stderr}`),
+        ok: true,
+        status: 'DRAFT_READY',
+        provider,
+        model: providerModel(provider),
+        files: createdOrChanged.length ? createdOrChanged : after,
+        details: safeProcessOutput(built.stdout),
+        scope: '.harsf-runtime/app-drafts only',
       },
     };
+  } finally {
+    appDraftBusy = false;
   }
-
-  const after = listDraftFiles();
-  const createdOrChanged = after.filter((path) => !before.has(path));
-  return {
-    status: 200,
-    payload: {
-      ok: true,
-      status: 'DRAFT_READY',
-      files: createdOrChanged.length ? createdOrChanged : after,
-      details: safeProcessOutput(built.stdout),
-      scope: '.harsf-runtime/app-drafts only',
-    },
-  };
 }
 
 async function callAnthropic(conversation) {
@@ -393,6 +427,7 @@ createServer(async (request, response) => {
       configured: candidates.length > 0,
       providers: candidates,
       appDraftRunner: existsSync(resolve(repoRoot, 'praison', 'app_builder_tools.py')),
+      appDraftBusy,
       ...(provider === 'omniroute' ? { router: 'OmniRoute', baseUrl: omniRouteBaseUrl } : {}),
     });
   }

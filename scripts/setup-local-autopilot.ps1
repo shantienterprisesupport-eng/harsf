@@ -16,6 +16,13 @@ function Refresh-Path {
   $env:Path = "$machine;$user"
 }
 
+function Find-Executable([string]$CommandName, [string]$FallbackPath) {
+  $cmd = Get-Command $CommandName -ErrorAction SilentlyContinue
+  if ($cmd) { return $cmd.Source }
+  if (Test-Path $FallbackPath) { return $FallbackPath }
+  return $null
+}
+
 Write-Host ""
 Write-Host "=== HARSF Local Autopilot Setup ==="
 Write-Host "Workspace: $repoRoot"
@@ -31,59 +38,45 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
 }
 
 # 1) Ollama: local, no API billing required.
-$ollama = Get-Command ollama -ErrorAction SilentlyContinue
-if (-not $ollama) {
-  $knownOllama = Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama.exe"
-  if (Test-Path $knownOllama) { $ollama = Get-Item $knownOllama }
-}
+$ollamaFallback = Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama.exe"
+$ollamaExe = Find-Executable "ollama" $ollamaFallback
 
-if (-not $ollama) {
+if (-not $ollamaExe) {
   if (Ask-YesNo "Install Ollama from the official ollama.com installer now?") {
     Write-Host "Installing Ollama from ollama.com..."
     Invoke-Expression (Invoke-RestMethod "https://ollama.com/install.ps1")
     Refresh-Path
-    $ollama = Get-Command ollama -ErrorAction SilentlyContinue
-    if (-not $ollama) {
-      $knownOllama = Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama.exe"
-      if (Test-Path $knownOllama) { $ollama = Get-Item $knownOllama }
-    }
+    $ollamaExe = Find-Executable "ollama" $ollamaFallback
   }
 }
 
-if ($ollama) {
-  Write-Host "Ollama found: $($ollama.Source)"
+if ($ollamaExe) {
+  Write-Host "Ollama found: $ollamaExe"
   $modelName = "qwen2.5-coder:3b"
-  $hasModel = (& $ollama.Source list 2>$null | Select-String -SimpleMatch $modelName)
+  $hasModel = (& $ollamaExe list 2>$null | Select-String -SimpleMatch $modelName)
   if (-not $hasModel -and (Ask-YesNo "Download the free local coding model $modelName (about 2 GB)?")) {
-    & $ollama.Source pull $modelName
+    & $ollamaExe pull $modelName
   }
 } else {
   Write-Warning "Ollama is not installed yet. You can rerun this setup later."
 }
 
 # 2) Open Interpreter: terminal agent with sandbox and approvals.
-$interpreter = Get-Command interpreter -ErrorAction SilentlyContinue
-if (-not $interpreter) {
-  $knownInterpreter = Join-Path $env:LOCALAPPDATA "Programs\Open Interpreter\bin\interpreter.exe"
-  if (Test-Path $knownInterpreter) { $interpreter = Get-Item $knownInterpreter }
-}
+$interpreterFallback = Join-Path $env:LOCALAPPDATA "Programs\Open Interpreter\bin\interpreter.exe"
+$interpreterExe = Find-Executable "interpreter" $interpreterFallback
 
-if (-not $interpreter) {
+if (-not $interpreterExe) {
   if (Ask-YesNo "Install Open Interpreter from the official openinterpreter.com installer now?") {
     Write-Host "Installing Open Interpreter from openinterpreter.com..."
     Invoke-Expression (Invoke-RestMethod "https://www.openinterpreter.com/install.ps1")
     Refresh-Path
-    $interpreter = Get-Command interpreter -ErrorAction SilentlyContinue
-    if (-not $interpreter) {
-      $knownInterpreter = Join-Path $env:LOCALAPPDATA "Programs\Open Interpreter\bin\interpreter.exe"
-      if (Test-Path $knownInterpreter) { $interpreter = Get-Item $knownInterpreter }
-    }
+    $interpreterExe = Find-Executable "interpreter" $interpreterFallback
   }
 }
 
-if ($interpreter) {
-  Write-Host "Open Interpreter found: $($interpreter.Source)"
-  & $interpreter.Source --version
+if ($interpreterExe) {
+  Write-Host "Open Interpreter found: $interpreterExe"
+  & $interpreterExe --version
 } else {
   Write-Warning "Open Interpreter is not installed yet. You can rerun this setup later."
 }

@@ -40,8 +40,11 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Check AI gateway syntax
-        run: node --check server/ai-gateway.mjs
+      - name: Check AI gateway and Ruflo orchestration syntax
+        run: |
+          node --check server/ai-gateway.mjs
+          node --check scripts/ruflo-orchestrate.mjs
+          node scripts/ruflo-orchestrate.mjs --self-test
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -57,7 +60,7 @@ jobs:
       - name: Verify PraisonAI, MCP and six-agent files
         run: |
           python -c "import praisonaiagents; from mcp.server import MCPServer; print('PraisonAI + MCP import OK')"
-          python -m py_compile praison/ai_company.py mcp_server/harsf_server.py
+          python -m py_compile praison/ai_company.py praison/run_handoff.py mcp_server/harsf_server.py
           python -m unittest mcp_server.test_harsf_server
           python - <<'PY'
           from pathlib import Path

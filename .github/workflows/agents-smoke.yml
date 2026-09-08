@@ -8,6 +8,7 @@ on:
       - 'server/**'
       - 'scripts/**'
       - 'praison/**'
+      - 'mcp_server/**'
       - 'n8n/**'
       - 'package.json'
       - '.github/workflows/agents-smoke.yml'
@@ -17,6 +18,7 @@ on:
       - 'server/**'
       - 'scripts/**'
       - 'praison/**'
+      - 'mcp_server/**'
       - 'n8n/**'
       - 'package.json'
       - '.github/workflows/agents-smoke.yml'
@@ -46,13 +48,13 @@ jobs:
       - name: Verify Ruflo CLI installs
         run: npx --yes ruflo@latest --version
 
-      - name: Install PraisonAI
-        run: python -m pip install praisonai
+      - name: Install PraisonAI and MCP
+        run: python -m pip install praisonai "mcp>=2,<3"
 
-      - name: Verify PraisonAI import and six-agent file
+      - name: Verify PraisonAI, MCP and six-agent files
         run: |
-          python -c "import praisonaiagents; print('PraisonAI import OK')"
-          python -m py_compile praison/ai_company.py
+          python -c "import praisonaiagents; from mcp.server import MCPServer; print('PraisonAI + MCP import OK')"
+          python -m py_compile praison/ai_company.py mcp_server/harsf_server.py
           python - <<'PY'
           from pathlib import Path
           text = Path('praison/ai_company.py').read_text(encoding='utf-8')

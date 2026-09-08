@@ -19,8 +19,9 @@ describe('provider runtime health mapping', () => {
     expect(providerRuntimeState(openai, [{ id: 'openai', configured: false, active: false, model: 'gpt-test' }])).toBe('not-configured');
   });
 
-  it('keeps future adapters distinct from live configured providers', () => {
-    expect(providerRuntimeState(alibaba, [])).toBe('adapter');
+  it('treats newly live Alibaba/Qwen as not configured until runtime config exists', () => {
+    expect(providerRuntimeState(alibaba, [])).toBe('not-configured');
+    expect(providerRuntimeState(alibaba, [{ id: 'alibaba', configured: true, active: false, model: 'qwen-test' }])).toBe('connected');
   });
 
   it('keeps research-only providers visibly research-only', () => {

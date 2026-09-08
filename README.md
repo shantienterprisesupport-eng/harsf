@@ -10,25 +10,38 @@ Human-CEO-controlled multi-agent software factory. A user can describe an app in
 - DONE / DOING / BLOCKED / NEXT workflow status plus per-agent activity status
 - Voice language selector for Hindi/Hinglish, Odia, and English
 - Live provider health badges that distinguish ACTIVE, CONNECTED, NOT CONFIGURED, ADAPTER, and RESEARCH without exposing keys
-- Live AI gateway support for OmniRoute, OpenAI/ChatGPT, Claude, DeepSeek, and xAI Grok when the corresponding authorized configuration is present
+- Live AI gateway support for OmniRoute, OpenAI/ChatGPT, Claude, DeepSeek, xAI Grok, Alibaba/Qwen, Zhipu/GLM, Moonshot/Kimi, MiniMax, HyperCLOVA X, and Upstage/Solar when authorized configuration is present
 - OmniRoute can sit in front of HARSF as the preferred smart routing/fallback layer while direct providers remain available as explicit alternatives
-- Provider registry/adapters for Alibaba/Qwen, Zhipu/GLM, Moonshot/Kimi, MiniMax, HyperCLOVA X, Solar, and research-only providers
 - Repository-scoped MCP server with local project memory and local Ollama semantic/vector recall
 - Ruflo safe orchestration handoff into the six-agent PraisonAI team
 - Safety-bounded local n8n import, status, and handoff flow
 - CI tests for approval policy, provider routing, secret leakage, memory safety, n8n/Ruflo safety, and agent delegation
 
-Provider names in the UI do not imply credentials or commercial access. The UI now separates live connected providers from adapter-only and research-only integrations. Sakana AI, Rakuten, ELYZA, CyberAgent, VARCO, and EXAONE remain research-only until a supported hosted API and authorization are supplied.
+Provider names in the UI do not imply credentials or commercial access. The UI separates live connected providers from unconfigured and research-only integrations. Sakana AI, Rakuten, ELYZA, CyberAgent, VARCO, and EXAONE remain research-only until a supported hosted API and authorization are supplied.
 
 ## Live provider selection
 
-Set `AI_PROVIDER` in `.env.local` to `auto`, `omniroute`, `openai`, `claude`, `deepseek`, or `grok`.
+Set `AI_PROVIDER` in `.env.local` to `auto` or an explicit provider. Supported names/aliases include:
 
-When OmniRoute is configured with `OMNIROUTE_API_KEY`, a valid `OMNIROUTE_BASE_URL`, and `OMNIROUTE_MODEL`, `auto` mode prefers OmniRoute first so its own routing/fallback rules can choose among providers. If OmniRoute is not fully configured, HARSF falls back to the first configured direct provider in this order: Claude, OpenAI, DeepSeek, then xAI Grok.
+- `omniroute` / `omni`
+- `openai`
+- `claude` / `anthropic`
+- `deepseek`
+- `grok` / `xai`
+- `alibaba` / `qwen` / `dashscope`
+- `zhipu` / `glm` / `bigmodel`
+- `moonshot` / `kimi`
+- `minimax`
+- `hyperclova` / `naver` / `clova`
+- `upstage` / `solar`
 
-The default OmniRoute base URL is `http://127.0.0.1:20128/v1`. Set `OMNIROUTE_MODEL` to the model, alias, wildcard route, or combo you configured in the OmniRoute dashboard. Real API keys stay only in `.env.local` and must never be committed.
+When OmniRoute is fully configured, `auto` mode prefers it first so its own routing/fallback rules can choose among providers. Without OmniRoute, HARSF tries configured direct providers in this order: Claude, OpenAI, DeepSeek, xAI, Alibaba/Qwen, Zhipu/GLM, Moonshot/Kimi, MiniMax, HyperCLOVA X, then Upstage/Solar.
 
-The gateway `/health` response exposes only safe connection metadata: provider id, configured/active booleans, and configured model names. It never returns API key values.
+The default OmniRoute base URL is `http://127.0.0.1:20128/v1`. Set `OMNIROUTE_MODEL` to the model, alias, wildcard route, or combo configured in OmniRoute.
+
+For Alibaba Cloud Model Studio, `ALIBABA_BASE_URL` is intentionally required instead of guessed because the OpenAI-compatible endpoint varies by region/workspace and must match the API key. Other newly live providers have documented default OpenAI-compatible base URLs in `.env.example`, but every base URL/model can be overridden locally.
+
+Real API keys stay only in `.env.local` and must never be committed. The gateway `/health` response exposes only safe connection metadata: provider id, configured/active booleans, and configured model names. It never returns API key values.
 
 ## HARSF Doctor
 

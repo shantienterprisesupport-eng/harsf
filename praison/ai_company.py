@@ -5,6 +5,10 @@ The Coding and GitHub Agent can create real source files only inside the isolate
 secrets, payments, database migrations, destructive actions, and merges remain
 behind explicit Human CEO approval.
 """
+from __future__ import annotations
+
+import os
+
 from praisonaiagents import Agent, Agents
 
 try:
@@ -29,9 +33,18 @@ APP_DRAFT_RULE = (
     "install packages, commit, merge, publish, or deploy."
 )
 
+MODEL = os.getenv("PRAISONAI_MODEL", "").strip() or None
+
+
+def _agent(**kwargs) -> Agent:
+    """Create an agent with the model selected by the HARSF gateway when supplied."""
+    if MODEL:
+        kwargs["llm"] = MODEL
+    return Agent(**kwargs)
+
 
 def build_team() -> Agents:
-    master = Agent(
+    master = _agent(
         name="Master Orchestrator Agent",
         instructions=(
             "Act as the main coordinator. Understand the Human CEO goal, break it into "
@@ -42,7 +55,7 @@ def build_team() -> Agents:
         ),
     )
 
-    workflow = Agent(
+    workflow = _agent(
         name="n8n Workflow Agent",
         instructions=(
             "Design and review n8n workflows, triggers, retries, webhook contracts, and "
@@ -51,7 +64,7 @@ def build_team() -> Agents:
         ),
     )
 
-    coding = Agent(
+    coding = _agent(
         name="Coding and GitHub Agent",
         instructions=(
             "Turn requirements into concrete implementation. Reuse current architecture "
@@ -61,7 +74,7 @@ def build_team() -> Agents:
         tools=[write_app_draft_file, list_app_draft_files, read_app_draft_file],
     )
 
-    qa = Agent(
+    qa = _agent(
         name="Bug Fix and QA Agent",
         instructions=(
             "Find root causes, propose minimal fixes, define regression tests, and verify "
@@ -71,7 +84,7 @@ def build_team() -> Agents:
         ),
     )
 
-    security = Agent(
+    security = _agent(
         name="Security Agent",
         instructions=(
             "Check secret handling, permissions, public-repo exposure, webhook abuse, "
@@ -80,7 +93,7 @@ def build_team() -> Agents:
         ),
     )
 
-    ops = Agent(
+    ops = _agent(
         name="Deploy and Ops Agent",
         instructions=(
             "Prepare safe runbooks for local startup, health checks, Docker/n8n runtime, "

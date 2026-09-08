@@ -13,12 +13,18 @@ export const agents: Agent[] = [
 ];
 
 const protectedAction = /(bug.?fix|code change|merge|deploy|secret|credential|api.?key|payment|purchase|migration|delete|production|publish|send money)/i;
+const appArtifact = /(app|website|web app|software|dashboard|portal)/i;
+const appCreation = /(banao|bana do|banana|build|create|make|develop|ready karo|taiyar karo)/i;
 
 export function requiresHumanApproval(risk: Risk, action: string): boolean {
   return protectedAction.test(action) || risk === 'high' || risk === 'critical';
 }
 
 export type GoalMode = 'build' | 'automation' | 'general';
+
+export function isAppDraftGoal(goal: string): boolean {
+  return appArtifact.test(goal) && appCreation.test(goal) && !/(merge|deploy|production|payment|purchase|api.?key|secret|credential|delete)/i.test(goal);
+}
 
 export function classifyGoal(goal: string): GoalMode {
   if (/(n8n|automation|workflow|whatsapp|gmail|email|calendar|webhook|api connect|integrat)/i.test(goal)) return 'automation';
@@ -74,7 +80,8 @@ export function buildLocalAssistantReply(goal: string, tasks: WorkflowTask[], pr
   const connectionNote = providerMessage ? ` Model connection: ${providerMessage}` : '';
 
   if (mode === 'build') {
-    return `App build request samajh gaya: “${goal}”. Workflow ready hai: ${nextSteps}. Code, security aur merge wale ${approvals} protected step${approvals === 1 ? '' : 's'} approval ke baad chalenge.${connectionNote}`;
+    const draftNote = isAppDraftGoal(goal) ? ' Safe app-draft runner bhi is command ko actual draft files banane ke liye route karega.' : '';
+    return `App build request samajh gaya: “${goal}”. Workflow ready hai: ${nextSteps}. Code, security aur merge wale ${approvals} protected step${approvals === 1 ? '' : 's'} approval ke baad chalenge.${draftNote}${connectionNote}`;
   }
 
   if (mode === 'automation') {

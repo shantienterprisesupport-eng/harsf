@@ -15,7 +15,6 @@ Write-Host "HARSF DOCTOR" -ForegroundColor Cyan
 Write-Host "Read-only diagnostics: no secrets, installs, starts, merges, deploys, or writes are performed." -ForegroundColor DarkGray
 Write-Host ""
 
-# Node + npm
 $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
 if ($nodeCmd) {
   $nodeVersion = (& node --version 2>$null).Trim()
@@ -30,7 +29,6 @@ if ($nodeCmd) {
 if (Get-Command npm -ErrorAction SilentlyContinue) { Done "npm available" }
 else { Blocked "npm not found" "Install Node.js/npm." }
 
-# Local environment: report names only, never values.
 $envFile = Join-Path (Get-Location) '.env.local'
 $providerKeys = @('ANTHROPIC_API_KEY','OPENAI_API_KEY','DEEPSEEK_API_KEY','XAI_API_KEY')
 $configuredProviders = New-Object System.Collections.Generic.List[string]
@@ -47,7 +45,6 @@ if (Test-Path $envFile) {
   Blocked ".env.local not found" "Copy .env.example to .env.local and add only authorized local credentials."
 }
 
-# Gateway health, only if already running.
 try {
   $health = Invoke-RestMethod -Uri 'http://127.0.0.1:8787/health' -Method Get -TimeoutSec 2
   if ($health.ok) {
@@ -58,7 +55,6 @@ try {
   Blocked "AI gateway is not currently reachable on 127.0.0.1:8787" "Run npm run ai:gateway in a separate terminal when you want live AI chat."
 }
 
-# PraisonAI virtual environment
 $python = Join-Path (Get-Location) '.venv\Scripts\python.exe'
 if (Test-Path $python) {
   & $python -c "import praisonai" 2>$null
@@ -71,7 +67,6 @@ if (Test-Path $python) {
 if (Test-Path 'praison\ai_company.py') { Done "Six-agent PraisonAI entrypoint exists" }
 else { Blocked "praison\ai_company.py is missing" "Restore the six-agent PraisonAI entrypoint from GitHub." }
 
-# Ruflo: do not install/download during doctor.
 if (Get-Command npx -ErrorAction SilentlyContinue) {
   $rufloVersion = (& npx --no-install ruflo --version 2>$null | Select-Object -First 1)
   if ($LASTEXITCODE -eq 0 -and $rufloVersion) { Done "Ruflo available locally: $rufloVersion" }
@@ -80,7 +75,6 @@ if (Get-Command npx -ErrorAction SilentlyContinue) {
   Blocked "npx not found, so Ruflo cannot be checked" "Install Node.js/npm."
 }
 
-# Docker + n8n: inspect only, never start containers.
 if (Get-Command docker -ErrorAction SilentlyContinue) {
   & docker info *> $null
   if ($LASTEXITCODE -eq 0) {
@@ -97,7 +91,7 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
   Blocked "Docker not found" "Install/start Docker only if you want the local n8n runtime."
 }
 
-if (Test-Path 'n8n\workflows\six-agent-intake.json') { Done "Six-agent n8n intake workflow file exists" }
+if (Test-Path 'n8n\workflows\harsf-agent-intake.json') { Done "Six-agent n8n intake workflow file exists" }
 else { Blocked "Six-agent n8n intake workflow file is missing" "Restore/import the workflow before n8n execution." }
 
 Write-Host ""

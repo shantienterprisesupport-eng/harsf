@@ -16,6 +16,8 @@ loadLocalEnv();
 const port = Number(process.env.AI_GATEWAY_PORT || 8787);
 const openAiModel = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
 const anthropicModel = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
+const deepSeekModel = process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash';
+const xaiModel = process.env.XAI_MODEL || 'grok-4.6';
 const requestedProvider = (process.env.AI_PROVIDER || 'auto').toLowerCase();
 const systemPrompt = `You are the HARSF Master AI Assistant for a Human CEO.
 Reply in the user's language (Hindi, Hinglish, Odia, or English), using simple concise wording.
@@ -29,15 +31,37 @@ Prefer the smallest safe next action and avoid unnecessary questions when a reas
 function activeProvider() {
   if (requestedProvider === 'anthropic' || requestedProvider === 'claude') return 'anthropic';
   if (requestedProvider === 'openai') return 'openai';
+  if (requestedProvider === 'deepseek') return 'deepseek';
+  if (requestedProvider === 'xai' || requestedProvider === 'grok') return 'xai';
   if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
   if (process.env.OPENAI_API_KEY) return 'openai';
+  if (process.env.DEEPSEEK_API_KEY) return 'deepseek';
+  if (process.env.XAI_API_KEY) return 'xai';
   return 'none';
 }
 
 function isConfigured(provider) {
   if (provider === 'anthropic') return Boolean(process.env.ANTHROPIC_API_KEY);
   if (provider === 'openai') return Boolean(process.env.OPENAI_API_KEY);
+  if (provider === 'deepseek') return Boolean(process.env.DEEPSEEK_API_KEY);
+  if (provider === 'xai') return Boolean(process.env.XAI_API_KEY);
   return false;
+}
+
+function providerModel(provider) {
+  if (provider === 'anthropic') return anthropicModel;
+  if (provider === 'openai') return openAiModel;
+  if (provider === 'deepseek') return deepSeekModel;
+  if (provider === 'xai') return xaiModel;
+  return null;
+}
+
+function missingCredential(provider) {
+  if (provider === 'anthropic') return 'ANTHROPIC_API_KEY';
+  if (provider === 'openai') return 'OPENAI_API_KEY';
+  if (provider === 'deepseek') return 'DEEPSEEK_API_KEY';
+  if (provider === 'xai') return 'XAI_API_KEY';
+  return 'ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, or XAI_API_KEY';
 }
 
 function json(response, status, payload) {
@@ -100,12 +124,69 @@ async function callOpenAI(message) {
   return data.output_text || 'No response returned.';
 }
 
+async function callOpenAICompatible({ url, apiKey, model, message, providerName }) {
+  const apiResponse = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 800,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: message },
+      ],
+    }),
+  });
+  const data = await apiResponse.json();
+  if (!apiResponse.ok) {
+    console.error(`${providerName} request failed:`, apiResponse.status);
+    throw new Error('provider-request-failed');
+  }
+  const text = data?.choices?.[0]?.message?.content;
+  return typeof text === 'string' && text.trim() ? text.trim() : 'No response returned.';
+}
+
+function callDeepSeek(message) {
+  return callOpenAICompatible({
+    url: 'https://api.deepseek.com/chat/completions',
+    apiKey: process.env.DEEPSEEK_API_KEY,
+    model: deepSeekModel,
+    message,
+    providerName: 'DeepSeek',
+  });
+}
+
+function callXAI(message) {
+  return callOpenAICompatible({
+    url: 'https://api.x.ai/v1/chat/completions',
+    apiKey: process.env.XAI_API_KEY,
+    model: xaiModel,
+    message,
+    providerName: 'xAI',
+  });
+}
+
+async function callProvider(provider, message) {
+  if (provider === 'anthropic') return callAnthropic(message);
+  if (provider === 'openai') return callOpenAI(message);
+  if (provider === 'deepseek') return callDeepSeek(message);
+  if (provider === 'xai') return callXAI(message);
+  throw new Error('provider-not-supported');
+}
+
 createServer(async (request, response) => {
   if (request.method === 'OPTIONS') return json(response, 204, {});
   if (request.method === 'GET' && request.url === '/health') {
     const provider = activeProvider();
-    const model = provider === 'anthropic' ? anthropicModel : provider === 'openai' ? openAiModel : null;
-    return json(response, 200, { ok: true, provider, model, configured: isConfigured(provider) });
+    return json(response, 200, {
+      ok: true,
+      provider,
+      model: providerModel(provider),
+      configured: isConfigured(provider),
+    });
   }
   if (request.method !== 'POST' || request.url !== '/api/ceo-chat') {
     return json(response, 404, { error: 'Not found.' });
@@ -127,15 +208,14 @@ createServer(async (request, response) => {
 
   const provider = activeProvider();
   if (!isConfigured(provider)) {
-    const missing = provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : provider === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY or OPENAI_API_KEY';
-    return json(response, 503, { error: `AI provider is not configured. ${missing} is required in .env.local.` });
+    return json(response, 503, {
+      error: `AI provider is not configured. ${missingCredential(provider)} is required in .env.local.`,
+    });
   }
 
   try {
-    const text = provider === 'anthropic'
-      ? await callAnthropic(message.trim())
-      : await callOpenAI(message.trim());
-    return json(response, 200, { text, provider });
+    const text = await callProvider(provider, message.trim());
+    return json(response, 200, { text, provider, model: providerModel(provider) });
   } catch {
     return json(response, 502, { error: 'AI provider could not be reached or rejected the request.' });
   }

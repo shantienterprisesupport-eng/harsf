@@ -27,20 +27,20 @@ if (Get-Command py -ErrorAction SilentlyContinue) {
 } elseif (Get-Command python -ErrorAction SilentlyContinue) {
   $pythonCmd = "python"
 } else {
-  throw "Python 3.10+ is required for PraisonAI."
+  throw "Python 3.10+ is required for PraisonAI and MCP."
 }
 
-Write-Host "Creating PraisonAI virtual environment..."
+Write-Host "Creating HARSF Python virtual environment..."
 if (-not (Test-Path ".venv\Scripts\python.exe")) {
   & $pythonCmd @pythonPrefix -m venv .venv
 }
 
 $venvPython = Join-Path $repoRoot ".venv\Scripts\python.exe"
 & $venvPython -m pip install --upgrade pip
-& $venvPython -m pip install praisonai
+& $venvPython -m pip install praisonai "mcp>=2,<3"
 
-Write-Host "Checking PraisonAI import..."
-& $venvPython -c "import praisonaiagents; print('PraisonAI OK')"
+Write-Host "Checking PraisonAI and MCP imports..."
+& $venvPython -c "import praisonaiagents; from mcp.server import MCPServer; print('PraisonAI + MCP OK')"
 
 Write-Host "Initializing Ruflo in this repository..."
 npx --yes ruflo@latest init

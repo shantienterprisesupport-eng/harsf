@@ -1,0 +1,11 @@
+# HARSF local-autopilot defaults.
+# Keep the agent inside this repository and require approval for escalation.
+model_provider = "ollama"
+model = "qwen2.5-coder:3b"
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+personality = "pragmatic"
+
+[sandbox_workspace_write]
+network_access = false
+writable_roots = []

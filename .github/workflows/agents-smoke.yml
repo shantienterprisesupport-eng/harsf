@@ -44,12 +44,12 @@ jobs:
         run: |
           node --check server/ai-gateway.mjs
           node --check server/provider-policy.mjs
-          node --check server/provider-policy.test.mjs
+          node --check server/provider-policy.selftest.mjs
           node --check scripts/security-self-test.mjs
           node --check scripts/ruflo-orchestrate.mjs
           node --check scripts/n8n-safe-handoff.mjs
           node --check scripts/n8n-import-workflow.mjs
-          node server/provider-policy.test.mjs
+          node server/provider-policy.selftest.mjs
           node scripts/security-self-test.mjs
           node scripts/ruflo-orchestrate.mjs --self-test
           node scripts/n8n-import-workflow.mjs --self-test

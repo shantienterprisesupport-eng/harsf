@@ -1,4 +1,4 @@
-# n8n Mini-App Agent
+# n8n Mini-App Agent.
 
 This folder keeps the n8n runtime separate from the main HARSF React/Vite app.
 

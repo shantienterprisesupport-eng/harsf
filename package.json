@@ -13,7 +13,6 @@
     "agents:setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-agents.ps1",
     "agents:verify": "powershell -ExecutionPolicy Bypass -File scripts/verify-agents.ps1",
     "agents:run": "powershell -ExecutionPolicy Bypass -Command \"& .\\.venv\\Scripts\\python.exe .\\praison\\ai_company.py\"",
-    "master:run": "powershell -ExecutionPolicy Bypass -File scripts/run-master-ai.ps1",
     "ruflo:doctor": "npx --yes ruflo@latest doctor",
     "n8n:start": "powershell -ExecutionPolicy Bypass -File scripts/start-n8n.ps1",
     "n8n:status": "powershell -ExecutionPolicy Bypass -File scripts/check-n8n.ps1"

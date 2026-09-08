@@ -75,6 +75,25 @@ function providerModel(provider) {
   return null;
 }
 
+function providerHealth(active) {
+  const liveProviders = [
+    ['omniroute', 'omniroute'],
+    ['openai', 'openai'],
+    ['claude', 'anthropic'],
+    ['deepseek', 'deepseek'],
+    ['grok', 'xai'],
+  ];
+  return liveProviders.map(([id, internalId]) => {
+    const configured = isConfigured(internalId);
+    return {
+      id,
+      configured,
+      active: configured && active === internalId,
+      model: configured ? providerModel(internalId) : null,
+    };
+  });
+}
+
 function missingCredential(provider) {
   if (provider === 'omniroute') return 'OMNIROUTE_API_KEY, OMNIROUTE_MODEL, and a valid OMNIROUTE_BASE_URL';
   if (provider === 'anthropic') return 'ANTHROPIC_API_KEY';
@@ -217,6 +236,7 @@ createServer(async (request, response) => {
       provider,
       model: providerModel(provider),
       configured: isConfigured(provider),
+      providers: providerHealth(provider),
       ...(provider === 'omniroute' ? { router: 'OmniRoute', baseUrl: omniRouteBaseUrl } : {}),
     });
   }

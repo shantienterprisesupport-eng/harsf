@@ -10,9 +10,13 @@ Use n8n as an orchestrator for small app/agent workflows while the main HARSF ap
 - Production Compose template with persistent storage
 - Private `.env` examples with no real credentials committed
 - One-command Windows startup: `npm run n8n:start`
-- Status/log check: `npm run n8n:status`
+- Safe status check: `npm run n8n:status`
+- Explicit local workflow import: `npm run n8n:import`
+- Safe local handoff: `npm run n8n:handoff -- "your planning goal"`
+- Ruflo-to-n8n handoff: `npm run n8n:handoff:ruflo`
+- One-click Windows handoff: `N8N-HARSF.cmd`
 - Importable six-agent intake workflow: `n8n/workflows/harsf-agent-intake.json`
-- Human approval gate for OTP, passwords, payments, secrets, credentials, merges, deploys, deletes, and migrations
+- Human approval gate for code/file mutation, OTP, passwords, payments, secrets, credentials, merges, publishing, deployments, deletes, migrations, and external messages
 
 The six repo-side roles are:
 1. Master Orchestrator Agent
@@ -26,29 +30,45 @@ The six repo-side roles are:
 - Never commit real API keys or passwords.
 - Put real secrets only in n8n Credentials or the deployed secret manager.
 - Keep GitHub credentials inside n8n Credentials or the deployment secret manager.
-- Passwords, OTPs, payments, secret changes, merges, deployments, migrations, deletes, and other irreversible actions require Human CEO approval.
+- Protected actions require explicit Human CEO approval before execution.
+- The repository workflow stays `active: false` by default.
+- `npm run n8n:import` imports the reviewed local workflow but does not activate it automatically.
+- The safe handoff command only permits loopback n8n URLs (`localhost`, `127.0.0.1`, or `::1`) in this phase.
+- `npm run n8n:status` does not dump container logs, reducing the chance of exposing user data or secrets.
 
-## Run locally on Windows
+## Safe local sequence
 From the repository root:
 
 ```powershell
 npm run n8n:start
+npm run n8n:status
+npm run n8n:import
 ```
 
-The startup script creates `n8n/.env` if needed, generates a private local encryption key, starts Docker Compose, and waits for `http://localhost:5678`.
+Then open n8n, review the imported workflow, and activate it manually only when you want the local webhook available.
 
-For diagnostics:
+For a safe planning/read-only goal:
 
 ```powershell
-npm run n8n:status
+npm run n8n:handoff -- "review the current workflow and identify blockers"
 ```
 
-## Import the starter workflow
-In n8n, import:
+Or, after Ruflo created a ready handoff:
 
-`n8n/workflows/harsf-agent-intake.json`
+```powershell
+npm run n8n:handoff:ruflo
+```
 
-It receives a `goal`, `task`, or `message`, routes it to one of the six roles, and blocks protected actions for Human CEO approval. It deliberately contains no real credentials.
+The handoff runner first checks local n8n `/healthz`, blocks protected goals, and only then posts to the local HARSF webhook. It never sends the goal to a remote webhook in this phase.
+
+## Import behavior
+The repository uses n8n's CLI workflow import command inside the running local container:
+
+```text
+n8n import:workflow --input=/tmp/harsf-agent-intake.json
+```
+
+The import is an explicit command. Activation stays manual so the Human CEO can review the workflow first.
 
 ## Connect an AI model
 After n8n is running, add an authorized AI-model credential in n8n and connect the selected model/agent node after the Safe Router. The repository does not store API keys. If ChatGPT/OpenAI is used as the master model, its credential must be added privately in n8n; GitHub connection alone does not provide that model credential.

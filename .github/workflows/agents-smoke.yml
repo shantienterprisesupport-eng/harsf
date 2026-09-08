@@ -40,11 +40,15 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Check AI gateway and Ruflo orchestration syntax
+      - name: Check AI gateway, Ruflo and n8n safety syntax
         run: |
           node --check server/ai-gateway.mjs
           node --check scripts/ruflo-orchestrate.mjs
+          node --check scripts/n8n-safe-handoff.mjs
+          node --check scripts/n8n-import-workflow.mjs
           node scripts/ruflo-orchestrate.mjs --self-test
+          node scripts/n8n-import-workflow.mjs --self-test
+          node scripts/n8n-safe-handoff.mjs --self-test
 
       - name: Set up Python
         uses: actions/setup-python@v5

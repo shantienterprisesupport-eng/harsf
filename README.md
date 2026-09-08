@@ -18,6 +18,10 @@ Provider names in the UI mean the integration boundary is implemented, not that 
 
 Set `AI_PROVIDER` in `.env.local` to `auto`, `openai`, `claude`, `deepseek`, or `grok`. In `auto` mode HARSF uses the first configured provider in this order: Claude, OpenAI, DeepSeek, then xAI Grok. Real API keys stay only in `.env.local` and must never be committed.
 
+## HARSF Doctor
+
+Double-click `HARSF-DOCTOR.cmd` or run `npm run doctor` to get a read-only local status report. It checks Node/npm, local provider configuration without printing secret values, the AI gateway health endpoint, PraisonAI, Ruflo availability, Docker/n8n, and the six-agent intake workflow. The summary is shown as `DONE / BLOCKED / NEXT`. Doctor mode does not install packages, start services, change credentials, merge, deploy, or write production data.
+
 ## Run on Windows
 
 Double-click `START-HARSF.cmd`. It checks for Node.js, installs the project packages on first run, and starts the HARSF web app locally. It does not use the old `runtime/start.mjs` starter.
@@ -27,6 +31,7 @@ Double-click `START-HARSF.cmd`. It checks for Node.js, installs the project pack
 ```bash
 npm install
 npm run qa
+npm run doctor
 npm run dev
 ```
 

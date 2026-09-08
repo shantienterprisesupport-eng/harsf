@@ -20,7 +20,11 @@
     "ruflo:orchestrate": "node scripts/ruflo-orchestrate.mjs",
     "ruflo:self-test": "node scripts/ruflo-orchestrate.mjs --self-test",
     "n8n:start": "powershell -ExecutionPolicy Bypass -File scripts/start-n8n.ps1",
-    "n8n:status": "powershell -ExecutionPolicy Bypass -File scripts/check-n8n.ps1"
+    "n8n:status": "powershell -ExecutionPolicy Bypass -File scripts/check-n8n.ps1",
+    "n8n:import": "node scripts/n8n-import-workflow.mjs",
+    "n8n:handoff": "node scripts/n8n-safe-handoff.mjs",
+    "n8n:handoff:ruflo": "node scripts/n8n-safe-handoff.mjs --from-ruflo",
+    "n8n:self-test": "node scripts/n8n-import-workflow.mjs --self-test && node scripts/n8n-safe-handoff.mjs --self-test"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",

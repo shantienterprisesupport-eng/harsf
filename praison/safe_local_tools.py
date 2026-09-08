@@ -15,6 +15,7 @@ from typing import Dict, List
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MAX_TEXT_BYTES = 1_000_000
+NPM = "npm.cmd" if os.name == "nt" else "npm"
 
 BLOCKED_NAMES = {
     ".env",
@@ -26,6 +27,7 @@ BLOCKED_NAMES = {
     "id_rsa",
     "id_ed25519",
 }
+SAFE_ENV_TEMPLATES = {".env.example", ".env.sample", ".env.template"}
 BLOCKED_PARTS = {".git", "node_modules", ".venv", "dist", "build", "coverage"}
 BLOCKED_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".crt", ".cer"}
 
@@ -35,12 +37,12 @@ SAFE_CHECKS: Dict[str, List[str]] = {
     "git_diff_staged": ["git", "diff", "--cached", "--"],
     "git_branch": ["git", "branch", "--show-current"],
     "git_log": ["git", "log", "-8", "--oneline"],
-    "test": ["npm", "run", "test"],
-    "build": ["npm", "run", "build"],
-    "qa": ["npm", "run", "qa"],
-    "agents_verify": ["npm", "run", "agents:verify"],
-    "n8n_status": ["npm", "run", "n8n:status"],
-    "ruflo_doctor": ["npm", "run", "ruflo:doctor"],
+    "test": [NPM, "run", "test"],
+    "build": [NPM, "run", "build"],
+    "qa": [NPM, "run", "qa"],
+    "agents_verify": [NPM, "run", "agents:verify"],
+    "n8n_status": [NPM, "run", "n8n:status"],
+    "ruflo_doctor": [NPM, "run", "ruflo:doctor"],
 }
 
 
@@ -59,9 +61,11 @@ def _assert_allowed(path: Path, *, writing: bool = False) -> None:
     lowered_parts = {part.lower() for part in rel.parts}
     if lowered_parts & BLOCKED_PARTS:
         raise PermissionError("Protected/generated directory is not available to the agent")
-    if path.name.lower() in BLOCKED_NAMES or path.suffix.lower() in BLOCKED_SUFFIXES:
+
+    name = path.name.lower()
+    if name in BLOCKED_NAMES or path.suffix.lower() in BLOCKED_SUFFIXES:
         raise PermissionError("Secret/credential files are blocked")
-    if path.name.lower().startswith(".env"):
+    if name.startswith(".env") and name not in SAFE_ENV_TEMPLATES:
         raise PermissionError("Environment secret files are blocked")
     if writing and path.suffix.lower() in {".exe", ".dll", ".sys", ".msi", ".bat", ".cmd", ".ps1"}:
         raise PermissionError("Executable/script creation is blocked by the local worker")

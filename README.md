@@ -7,12 +7,14 @@ Human-CEO-controlled multi-agent software factory. A user can describe an app in
 - Responsive voice/text CEO chat interface
 - AI CEO task planner for Product, CTO, UI/UX, Developer, Database, QA, Security, BugFix, and Code Review agents
 - Human approval queue and approve/reject decisions
+- Context-aware Master Assistant replies with model/provider failover and goal-specific local fallback
 - Live AI gateway support for OmniRoute, OpenAI/ChatGPT, Claude, DeepSeek, and xAI Grok when the corresponding authorized configuration is present
 - OmniRoute can sit in front of HARSF as the preferred smart routing/fallback layer while direct providers remain available as explicit alternatives
 - Provider registry/adapters for Alibaba/Qwen, Zhipu/GLM, Moonshot/Kimi, MiniMax, HyperCLOVA X, Solar, and research-only providers
 - Repository-scoped MCP server with local project memory and local Ollama semantic/vector recall
 - Ruflo safe orchestration handoff into the six-agent PraisonAI team
-- Unit tests for approval policy, memory safety, and agent delegation
+- Safe app-draft builder: the Coding Agent can create real source/config/documentation files inside `.harsf-runtime/app-drafts` without changing tracked HARSF code
+- Unit tests for approval policy, memory safety, app-draft path/secret safety, and agent delegation
 
 Provider names in the UI mean the integration boundary is implemented, not that credentials or commercial access have been granted. Sakana AI, Rakuten, ELYZA, CyberAgent, VARCO, and EXAONE are marked research-only until a supported hosted API and authorization are supplied.
 
@@ -20,7 +22,7 @@ Provider names in the UI mean the integration boundary is implemented, not that 
 
 Set `AI_PROVIDER` in `.env.local` to `auto`, `omniroute`, `openai`, `claude`, `deepseek`, or `grok`.
 
-When OmniRoute is configured with `OMNIROUTE_API_KEY`, a valid `OMNIROUTE_BASE_URL`, and `OMNIROUTE_MODEL`, `auto` mode prefers OmniRoute first so its own routing/fallback rules can choose among providers. If OmniRoute is not fully configured, HARSF falls back to the first configured direct provider in this order: Claude, OpenAI, DeepSeek, then xAI Grok.
+When OmniRoute has a valid `OMNIROUTE_BASE_URL` and `OMNIROUTE_MODEL`, `auto` mode prefers OmniRoute first so its own routing/fallback rules can choose among providers. `OMNIROUTE_API_KEY` is optional for a local OmniRoute endpoint that does not require bearer authentication. If OmniRoute is not configured, HARSF falls back to the first configured direct provider in this order: Claude, OpenAI, DeepSeek, then xAI Grok.
 
 The default OmniRoute base URL is `http://127.0.0.1:20128/v1`. Set `OMNIROUTE_MODEL` to the model, alias, wildcard route, or combo you configured in the OmniRoute dashboard. Real API keys stay only in `.env.local` and must never be committed.
 
@@ -48,6 +50,27 @@ npm run agents:run:handoff
 
 This keeps orchestration and potentially billable model execution as two explicit steps.
 
+## Safe app building
+
+For a goal such as `booking app banao`, Ruflo can hand the request to the six-agent team. The Coding and GitHub Agent now has isolated app-draft tools and is instructed to create actual source/config/documentation files instead of only returning a generic plan.
+
+Draft files are written only under:
+
+```text
+.harsf-runtime/app-drafts/<app-name>/
+```
+
+The draft workspace is local and ignored by Git. It blocks path traversal, `.env`/credential files, private-key formats, and real-looking secret values. The draft tools do not install packages, run generated code, edit tracked HARSF files, commit, merge, publish, or deploy. Those later actions remain separate Human CEO decisions.
+
+A typical safe flow is:
+
+```bash
+npm run ruflo:orchestrate -- "simple booking app banao"
+npm run agents:run:handoff
+```
+
+Then review the generated draft under `.harsf-runtime/app-drafts` before approving any move into a tracked project or any execution/deployment step.
+
 ## Run on Windows
 
 Double-click `START-HARSF.cmd`. It checks for Node.js, installs the project packages on first run, and starts the HARSF web app locally. It does not use the old `runtime/start.mjs` starter.
@@ -66,4 +89,4 @@ Copy `.env.example` to `.env.local` and add only credentials you are authorized 
 
 ## Safety
 
-Read-only inspection, planning, local coordination records, and local test runs may proceed automatically. Every code/bug-fix decision, merge, deployment, credential change, payment, database migration, destructive operation, and irreversible external action requires explicit Human CEO approval.
+Read-only inspection, planning, local coordination records, and isolated app-draft creation may proceed automatically. Every tracked code/bug-fix decision, merge, deployment, credential change, payment, database migration, destructive operation, and irreversible external action requires explicit Human CEO approval.

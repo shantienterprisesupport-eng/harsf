@@ -1,16 +1,34 @@
-"""HARSF six-agent starter team.
+"""HARSF six-agent team with a safe app-draft workspace.
 
-This module defines the repo-side agent roles. It is intentionally non-destructive:
-no filesystem, deployment, secret, database, payment, OTP, or merge mutation tools
-are attached here. Those actions remain behind explicit Human CEO approval.
+The Coding and GitHub Agent can create real source files only inside the isolated
+.harsf-runtime/app-drafts workspace. Tracked repository changes, deployment,
+secrets, payments, database migrations, destructive actions, and merges remain
+behind explicit Human CEO approval.
 """
 from praisonaiagents import Agent, Agents
 
+try:
+    from .app_builder_tools import list_app_draft_files, read_app_draft_file, write_app_draft_file
+except ImportError:  # Running this file directly from the praison directory.
+    from app_builder_tools import list_app_draft_files, read_app_draft_file, write_app_draft_file
+
+
 HUMAN_GATE = (
     "Stop and request Human CEO approval before any password, OTP, payment, secret, "
-    "credential change, deployment, merge, database migration, destructive action, "
-    "or irreversible external action. Never expose or store secrets in output."
+    "credential change, deployment, merge, tracked-repository code change, database "
+    "migration, destructive action, or irreversible external action. Never expose or "
+    "store secrets in output."
 )
+
+APP_DRAFT_RULE = (
+    "For a request to build a new app, do not stop at a generic plan. Use the app-draft "
+    "tools to create the actual source/config/documentation files in the isolated draft "
+    "workspace. Start with the smallest runnable structure that satisfies the request, "
+    "iterate by reading the draft files when needed, and list the files you created. "
+    "Draft files are not approval to modify HARSF tracked source, run generated code, "
+    "install packages, commit, merge, publish, or deploy."
+)
+
 
 def build_team() -> Agents:
     master = Agent(
@@ -19,7 +37,8 @@ def build_team() -> Agents:
             "Act as the main coordinator. Understand the Human CEO goal, break it into "
             "small tasks, delegate to the five specialist roles, combine their results, "
             "and report DONE / DOING / BLOCKED / NEXT. Prefer existing repo work over "
-            "starting over. " + HUMAN_GATE
+            "starting over. For new-app goals, make sure the Coding and GitHub Agent "
+            "produces an isolated app draft instead of only describing one. " + HUMAN_GATE
         ),
     )
 
@@ -35,17 +54,20 @@ def build_team() -> Agents:
     coding = Agent(
         name="Coding and GitHub Agent",
         instructions=(
-            "Turn approved requirements into small code changes, GitHub-ready patches, "
-            "commits, and pull-request notes. Reuse current architecture and avoid broad "
-            "rewrites. Do not merge or deploy without approval. " + HUMAN_GATE
+            "Turn requirements into concrete implementation. Reuse current architecture "
+            "for existing-project work and prepare GitHub-ready patches without applying "
+            "tracked changes unless approved. " + APP_DRAFT_RULE + " " + HUMAN_GATE
         ),
+        tools=[write_app_draft_file, list_app_draft_files, read_app_draft_file],
     )
 
     qa = Agent(
         name="Bug Fix and QA Agent",
         instructions=(
             "Find root causes, propose minimal fixes, define regression tests, and verify "
-            "acceptance criteria. Never hide failing tests or bypass safeguards. " + HUMAN_GATE
+            "acceptance criteria. For a new app draft, review the Coding Agent's reported "
+            "file structure and identify missing acceptance checks. Never hide failing "
+            "tests or bypass safeguards. " + HUMAN_GATE
         ),
     )
 
@@ -53,8 +75,8 @@ def build_team() -> Agents:
         name="Security Agent",
         instructions=(
             "Check secret handling, permissions, public-repo exposure, webhook abuse, "
-            "dependency risk, and unsafe automation. Recommend least-privilege fixes. "
-            + HUMAN_GATE
+            "dependency risk, and unsafe automation. App drafts must keep credentials out "
+            "of source files. Recommend least-privilege fixes. " + HUMAN_GATE
         ),
     )
 
@@ -62,15 +84,18 @@ def build_team() -> Agents:
         name="Deploy and Ops Agent",
         instructions=(
             "Prepare safe runbooks for local startup, health checks, Docker/n8n runtime, "
-            "CI status, rollback, and deployment readiness. Do not deploy or change live "
-            "infrastructure without Human CEO approval. " + HUMAN_GATE
+            "CI status, rollback, and deployment readiness. Do not run unreviewed generated "
+            "app code, deploy, or change live infrastructure without Human CEO approval. "
+            + HUMAN_GATE
         ),
     )
 
     return Agents(agents=[master, workflow, coding, qa, security, ops])
 
+
 def run(goal: str):
     return build_team().start(goal)
+
 
 if __name__ == "__main__":
     goal = input("Human CEO goal: ").strip()

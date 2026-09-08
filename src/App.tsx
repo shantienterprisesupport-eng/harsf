@@ -115,7 +115,7 @@ export default function App() {
       const response = await fetch(appDraftUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: goal }),
+        body: JSON.stringify({ message: `Build a safe app draft for this request: ${goal}` }),
       });
       const result = await response.json() as AppDraftReply;
       if (!response.ok || !result.ok) {

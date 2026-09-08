@@ -1,6 +1,13 @@
 import { createServer } from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import {
+  isProviderConfigured,
+  missingCredential,
+  modelForProvider,
+  providerHealthSnapshot,
+  selectActiveProvider,
+} from './provider-policy.mjs';
 
 function loadLocalEnv() {
   const file = resolve(process.cwd(), '.env.local');
@@ -30,7 +37,15 @@ const deepSeekModel = process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash';
 const xaiModel = process.env.XAI_MODEL || 'grok-4.6';
 const omniRouteBaseUrl = normalizeHttpBaseUrl(process.env.OMNIROUTE_BASE_URL || 'http://127.0.0.1:20128/v1');
 const omniRouteModel = (process.env.OMNIROUTE_MODEL || '').trim();
-const requestedProvider = (process.env.AI_PROVIDER || 'auto').toLowerCase();
+const requestedProvider = process.env.AI_PROVIDER || 'auto';
+const providerConfig = { omniRouteModel, omniRouteBaseUrl };
+const providerModels = {
+  omniroute: omniRouteModel,
+  anthropic: anthropicModel,
+  openai: openAiModel,
+  deepseek: deepSeekModel,
+  xai: xaiModel,
+};
 const systemPrompt = `You are the HARSF Master AI Assistant for a Human CEO.
 Reply in the user's language (Hindi, Hinglish, Odia, or English), using simple concise wording.
 Your job is to understand goals, coordinate HARSF/L GenZ/n8n and connected tools, break work into safe next steps, and report progress using DONE / DOING / BLOCKED / NEXT when useful.
@@ -41,47 +56,15 @@ If an integration is not connected, say exactly what is missing instead of prete
 Prefer the smallest safe next action and avoid unnecessary questions when a reasonable plan can be made.`;
 
 function activeProvider() {
-  if (requestedProvider === 'omniroute' || requestedProvider === 'omni') return 'omniroute';
-  if (requestedProvider === 'anthropic' || requestedProvider === 'claude') return 'anthropic';
-  if (requestedProvider === 'openai') return 'openai';
-  if (requestedProvider === 'deepseek') return 'deepseek';
-  if (requestedProvider === 'xai' || requestedProvider === 'grok') return 'xai';
-
-  if (isConfigured('omniroute')) return 'omniroute';
-  if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
-  if (process.env.OPENAI_API_KEY) return 'openai';
-  if (process.env.DEEPSEEK_API_KEY) return 'deepseek';
-  if (process.env.XAI_API_KEY) return 'xai';
-  return 'none';
+  return selectActiveProvider(requestedProvider, process.env, providerConfig);
 }
 
 function isConfigured(provider) {
-  if (provider === 'omniroute') {
-    return Boolean(process.env.OMNIROUTE_API_KEY && omniRouteModel && omniRouteBaseUrl);
-  }
-  if (provider === 'anthropic') return Boolean(process.env.ANTHROPIC_API_KEY);
-  if (provider === 'openai') return Boolean(process.env.OPENAI_API_KEY);
-  if (provider === 'deepseek') return Boolean(process.env.DEEPSEEK_API_KEY);
-  if (provider === 'xai') return Boolean(process.env.XAI_API_KEY);
-  return false;
+  return isProviderConfigured(provider, process.env, providerConfig);
 }
 
 function providerModel(provider) {
-  if (provider === 'omniroute') return omniRouteModel || null;
-  if (provider === 'anthropic') return anthropicModel;
-  if (provider === 'openai') return openAiModel;
-  if (provider === 'deepseek') return deepSeekModel;
-  if (provider === 'xai') return xaiModel;
-  return null;
-}
-
-function missingCredential(provider) {
-  if (provider === 'omniroute') return 'OMNIROUTE_API_KEY, OMNIROUTE_MODEL, and a valid OMNIROUTE_BASE_URL';
-  if (provider === 'anthropic') return 'ANTHROPIC_API_KEY';
-  if (provider === 'openai') return 'OPENAI_API_KEY';
-  if (provider === 'deepseek') return 'DEEPSEEK_API_KEY';
-  if (provider === 'xai') return 'XAI_API_KEY';
-  return 'a configured OmniRoute route or one direct AI provider credential';
+  return modelForProvider(provider, providerModels);
 }
 
 function json(response, status, payload) {
@@ -217,6 +200,7 @@ createServer(async (request, response) => {
       provider,
       model: providerModel(provider),
       configured: isConfigured(provider),
+      providers: providerHealthSnapshot(provider, process.env, providerConfig, providerModels),
       ...(provider === 'omniroute' ? { router: 'OmniRoute', baseUrl: omniRouteBaseUrl } : {}),
     });
   }

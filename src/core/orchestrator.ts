@@ -12,7 +12,7 @@ export const agents: Agent[] = [
   { id: 'review', name: 'Code Review Agent', role: 'Final diff review', status: 'ready' },
 ];
 
-const protectedAction = /(bug.?fix|code change|merge|deploy|secret|credential|api.?key|payment|purchase|migration|delete|production|publish|send money)/i;
+const protectedAction = /(bug.?fix|code change|merge|deploy|secret|credential|api.?key|payment|purchase|migration|delete|production|publish|send money|send (?:an? )?(?:email|message)|post (?:a )?(?:message|comment)|whatsapp (?:message|send))/i;
 
 export function requiresHumanApproval(risk: Risk, action: string): boolean {
   return protectedAction.test(action) || risk === 'high' || risk === 'critical';

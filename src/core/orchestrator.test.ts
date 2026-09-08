@@ -14,6 +14,13 @@ describe('human approval policy', () => {
     expect(requiresHumanApproval('low', 'deploy app')).toBe(true);
   });
 
+  it('blocks merges, publishing and external messages', () => {
+    expect(requiresHumanApproval('low', 'merge pull request')).toBe(true);
+    expect(requiresHumanApproval('low', 'publish release')).toBe(true);
+    expect(requiresHumanApproval('low', 'send email to client')).toBe(true);
+    expect(requiresHumanApproval('low', 'send message on WhatsApp')).toBe(true);
+  });
+
   it('allows safe read-only analysis', () => expect(requiresHumanApproval('low', 'analyze requirements')).toBe(false));
 
   it('blocks all high and critical risk actions', () => {

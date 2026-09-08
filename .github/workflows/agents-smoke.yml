@@ -40,12 +40,17 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Check AI gateway, Ruflo and n8n safety syntax
+      - name: Check gateway, routing and orchestration safety
         run: |
           node --check server/ai-gateway.mjs
+          node --check server/provider-policy.mjs
+          node --check server/provider-policy.selftest.mjs
+          node --check scripts/security-self-test.mjs
           node --check scripts/ruflo-orchestrate.mjs
           node --check scripts/n8n-safe-handoff.mjs
           node --check scripts/n8n-import-workflow.mjs
+          node server/provider-policy.selftest.mjs
+          node scripts/security-self-test.mjs
           node scripts/ruflo-orchestrate.mjs --self-test
           node scripts/n8n-import-workflow.mjs --self-test
           node scripts/n8n-safe-handoff.mjs --self-test

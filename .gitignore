@@ -1,9 +1,6 @@
-node_modules
-dist
-.env
 .env.local
-coverage
-*.log
 .venv/
 __pycache__/
 *.pyc
+node_modules/
+.ruflo/

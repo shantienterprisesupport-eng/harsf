@@ -1,32 +1,18 @@
-# HARSF Autonomous AI Company
+# Personal Master AI Agent
 
-Human-CEO-controlled multi-agent software factory. A user can describe an app in simple Odia, Hindi, Hinglish, or English by voice or text. The AI CEO creates a delegated workflow, while code changes, bug fixes, merges, deployments, secrets, and destructive actions stop at a Human-in-the-Loop approval gate.
+Standalone personal AI orchestrator for Windows. It accepts a goal in Hindi, Hinglish, Odia, or English, delegates planning/coding/QA/security/ops work, and keeps protected actions behind Human CEO approval.
 
-## Current MVP
+## Windows start
+1. Copy `.env.example` to `.env.local`.
+2. Add your authorized AI provider key locally. Never commit `.env.local`.
+3. Double-click `MASTER-AI.cmd`.
 
-- Responsive voice/text CEO chat interface
-- AI CEO task planner for Product, CTO, UI/UX, Developer, Database, QA, Security, BugFix, and Code Review agents
-- Human approval queue and approve/reject decisions
-- Provider registry/adapters for OpenAI/ChatGPT (Codex/GPT), Claude, DeepSeek, Grok, Alibaba/Qwen, Zhipu/GLM, Moonshot/Kimi, MiniMax, HyperCLOVA X, Solar, and research-only providers
-- MCP connection contract for scoped local Git, GitHub, and vector memory
-- Unit tests for approval policy and agent delegation
+The first run creates a Python virtual environment and installs PraisonAI.
 
-Provider names in the UI mean the integration boundary is implemented, not that credentials or commercial access have been granted. Sakana AI, Rakuten, ELYZA, CyberAgent, VARCO, and EXAONE are marked research-only until a supported hosted API and authorization are supplied.
+## Safety gates
+The agent must stop for explicit human approval before passwords, OTPs, payments, secrets, credential changes, deployments, merges, database migrations, destructive actions, access-control changes, or irreversible external actions.
 
-## Run on Windows
+## Provider setup
+Default provider is Claude/Anthropic. OpenAI can also be selected by changing `AI_PROVIDER` in `.env.local`.
 
-Double-click `START-HARSF.cmd`. It checks for Node.js, installs the project packages on first run, and starts the HARSF web app locally. It does not use the old `runtime/start.mjs` starter.
-
-## Manual run
-
-```bash
-npm install
-npm run qa
-npm run dev
-```
-
-Copy `.env.example` to `.env.local` and add only credentials you are authorized to use. Never expose provider keys to the browser in production; use a server-side gateway.
-
-## Safety
-
-Read-only inspection, planning, and local test runs may proceed automatically. Every code/bug-fix decision, merge, deployment, credential change, database migration, and destructive operation requires explicit Human CEO approval.
+This branch intentionally contains only the Personal Master AI files, separate from the HARSF business app tree.

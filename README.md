@@ -45,3 +45,12 @@ Copy `.env.example` to `.env.local` and add only credentials you are authorized 
 ## Safety
 
 Read-only inspection, planning, and local test runs may proceed automatically. Every code/bug-fix decision, merge, deployment, credential change, database migration, and destructive operation requires explicit Human CEO approval.
+
+## Ad automation reference architecture
+
+The production-oriented design guide for the FlutterFlow/Supabase/n8n self-serve ad
+automation workflow is in [`docs/ad-automation-platform.md`](docs/ad-automation-platform.md).
+It includes the OpenAI structured-output contract, Razorpay trust boundary, Google Ads
+and Meta request templates, analytics sync design, and frontend state flow. The
+companion database migration and JSON Schema are under `supabase/migrations` and
+`schemas` respectively.

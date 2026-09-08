@@ -64,8 +64,8 @@ jobs:
       - name: Verify PraisonAI, MCP and six-agent files
         run: |
           python -c "import praisonaiagents; from mcp.server import MCPServer; print('PraisonAI + MCP import OK')"
-          python -m py_compile praison/ai_company.py praison/run_handoff.py mcp_server/harsf_server.py
-          python -m unittest mcp_server.test_harsf_server
+          python -m py_compile praison/ai_company.py praison/run_handoff.py praison/app_builder_tools.py mcp_server/harsf_server.py
+          python -m unittest mcp_server.test_harsf_server praison.test_app_builder_tools
           python - <<'PY'
           from pathlib import Path
           text = Path('praison/ai_company.py').read_text(encoding='utf-8')

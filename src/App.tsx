@@ -2,12 +2,20 @@ import { useEffect, useMemo, useState } from 'react';
 import { Bot, Check, ChevronRight, CircleDot, GitBranch, Languages, Mic, Network, Send, ShieldCheck, Square, X } from 'lucide-react';
 import { agents, decideTask, planGoal, summarizeWorkflow } from './core/orchestrator';
 import { mcpServers } from './core/mcp';
+import { providerRuntimeLabel, providerRuntimeState, type RuntimeProviderHealth } from './core/providerHealth';
 import { providers } from './config/providers';
 import type { ChatMessage, WorkflowTask } from './types';
 import './index.css';
 import './master-assistant.css';
 
 type RecognitionCtor = new () => { lang: string; continuous: boolean; interimResults: boolean; start(): void; stop(): void; onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null; onend: (() => void) | null };
+type LanguageId = 'hi' | 'or' | 'en';
+interface GatewayHealth {
+  configured?: boolean;
+  provider?: string;
+  model?: string | null;
+  providers?: RuntimeProviderHealth[];
+}
 
 const aiGatewayBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8787';
 const aiGatewayUrl = `${aiGatewayBaseUrl}/api/ceo-chat`;
@@ -18,10 +26,26 @@ const quickJobs = [
   'n8n automation ka plan banao',
 ];
 
+const languageOptions: Array<{ id: LanguageId; label: string; speech: string }> = [
+  { id: 'hi', label: 'Hindi / Hinglish', speech: 'hi-IN' },
+  { id: 'or', label: 'Odia', speech: 'or-IN' },
+  { id: 'en', label: 'English', speech: 'en-IN' },
+];
+
+function taskActivity(task?: WorkflowTask) {
+  if (!task) return { label: 'READY', className: 'ready' };
+  if (task.status === 'running') return { label: 'DOING', className: 'doing' };
+  if (task.status === 'approval') return { label: 'BLOCKED', className: 'blocked' };
+  if (task.status === 'approved') return { label: 'DONE', className: 'done' };
+  if (task.status === 'rejected') return { label: 'BLOCKED', className: 'blocked' };
+  return { label: 'NEXT', className: 'next' };
+}
+
 export default function App() {
   const [input, setInput] = useState('');
   const [listening, setListening] = useState(false);
-  const [gatewayReady, setGatewayReady] = useState<boolean | null>(null);
+  const [gatewayHealth, setGatewayHealth] = useState<GatewayHealth | null>(null);
+  const [languageId, setLanguageId] = useState<LanguageId>('hi');
   const [tasks, setTasks] = useState<WorkflowTask[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([
     { id: 'welcome', author: 'ceo', text: 'Namaste! Main aapka HARSF Master AI Assistant hoon. Hindi, Hinglish, Odia ya English mein kaam bolo. Main task samajhkar workflow banaunga, status dikhata rahunga, aur payment, API key, code change, delete, merge ya deploy se pehle aapka approval lunga.' },
@@ -30,12 +54,19 @@ export default function App() {
   useEffect(() => {
     fetch(`${aiGatewayBaseUrl}/health`)
       .then((response) => response.json())
-      .then((data: { configured?: boolean }) => setGatewayReady(Boolean(data.configured)))
-      .catch(() => setGatewayReady(false));
+      .then((data: GatewayHealth) => setGatewayHealth(data))
+      .catch(() => setGatewayHealth({ configured: false, provider: 'none', providers: [] }));
   }, []);
 
+  const gatewayReady = gatewayHealth === null ? null : Boolean(gatewayHealth.configured);
+  const runtimeProviders = gatewayHealth?.providers ?? [];
   const pending = useMemo(() => tasks.filter((task) => task.status === 'approval').length, [tasks]);
   const workflowStatus = useMemo(() => summarizeWorkflow(tasks, gatewayReady), [tasks, gatewayReady]);
+  const selectedLanguage = languageOptions.find((language) => language.id === languageId) ?? languageOptions[0];
+  const agentActivity = useMemo(() => agents.map((agent) => {
+    const task = tasks.find((item) => item.agentId === agent.id);
+    return { agent, task, activity: taskActivity(task) };
+  }), [tasks]);
 
   async function askAiCeo(goal: string, fallback: string) {
     try {
@@ -71,7 +102,7 @@ export default function App() {
       return;
     }
     const recognition = new Ctor();
-    recognition.lang = 'hi-IN';
+    recognition.lang = selectedLanguage.speech;
     recognition.continuous = false;
     recognition.interimResults = false;
     recognition.onresult = (event) => setInput(event.results[0][0].transcript);
@@ -91,7 +122,7 @@ export default function App() {
     </header>
 
     <section className="hero">
-      <div className="eyebrow"><CircleDot size={13}/> {gatewayReady === null ? 'Checking AI connection…' : gatewayReady ? 'Master Assistant connected' : 'Planning mode — AI key not connected'}</div>
+      <div className="eyebrow"><CircleDot size={13}/> {gatewayReady === null ? 'Checking AI connection…' : gatewayReady ? `Master Assistant connected · ${gatewayHealth?.provider ?? 'provider'}` : 'Planning mode — AI key not connected'}</div>
       <h1>Kaam bolo. Assistant<br/><span>plan aur coordinate karega.</span></h1>
       <p>Voice ya text se command do. Protected actions par final approval hamesha aapka rahega.</p>
       <div className="quick-jobs">{quickJobs.map((job) => <button key={job} onClick={() => void submit(job)}>{job}</button>)}</div>
@@ -108,9 +139,15 @@ export default function App() {
       <section className="chat panel">
         <div className="panel-title"><div><h2>Master Assistant Chat</h2><p><Languages size={14}/> Odia · Hindi · Hinglish · English</p></div><span className="live">{gatewayReady ? 'AI READY' : 'PLAN MODE'}</span></div>
         <div className="messages">{messages.map((m) => <div key={m.id} className={`message ${m.author}`}><span>{m.author === 'ceo' ? 'MASTER AI' : 'YOU'}</span>{m.text}</div>)}</div>
+        <div className="composer-tools">
+          <label htmlFor="voice-language"><Languages size={14}/> Voice</label>
+          <select id="voice-language" aria-label="Voice language" value={languageId} onChange={(event) => setLanguageId(event.target.value as LanguageId)}>
+            {languageOptions.map((language) => <option value={language.id} key={language.id}>{language.label}</option>)}
+          </select>
+        </div>
         <div className="composer">
           <textarea aria-label="Task command" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submit(); } }} placeholder="Jaise: L GenZ booking module ka next kaam karo…"/>
-          <button className={`voice ${listening ? 'active' : ''}`} aria-label="Voice input" onClick={voice}>{listening ? <Square size={18}/> : <Mic size={20}/>}</button>
+          <button className={`voice ${listening ? 'active' : ''}`} aria-label={`Voice input in ${selectedLanguage.label}`} onClick={voice}>{listening ? <Square size={18}/> : <Mic size={20}/>}</button>
           <button className="send" aria-label="Send" onClick={() => void submit()}><Send size={20}/></button>
         </div>
       </section>
@@ -121,11 +158,19 @@ export default function App() {
           <div className="task-list">{tasks.length === 0 ? <div className="empty"><ShieldCheck/><p>No pending decisions</p><small>Protected action se pehle assistant yahin approval mangega.</small></div> : tasks.map((task) => <div className="task" key={task.id}><div><span className={`status ${task.status}`}>{task.status}</span><strong>{task.title.split(':')[0]}</strong><small>{agents.find(a => a.id === task.agentId)?.name}</small></div>{task.status === 'approval' && <div className="actions"><button aria-label="Reject" onClick={() => decision(task.id, false)}><X size={15}/></button><button aria-label="Approve" className="approve" onClick={() => decision(task.id, true)}><Check size={15}/></button></div>}</div>)}</div>
         </section>
 
+        <section className="panel agent-activity">
+          <div className="panel-title"><div><h2>Agent Activity</h2><p>DONE · DOING · BLOCKED · NEXT</p></div><CircleDot size={18}/></div>
+          <div className="agent-list">{agentActivity.map(({ agent, task, activity }) => <div className="agent-row" key={agent.id}><div><strong>{agent.name}</strong><small>{task ? task.title.split(':')[0] : agent.role}</small></div><span className={activity.className}>{activity.label}</span></div>)}</div>
+        </section>
+
         <section className="panel connections"><div className="panel-title"><div><h2>Connected System</h2><p>Safe adapter architecture</p></div><Network size={20}/></div>{mcpServers.map((server) => <div className="connection" key={server.id}><GitBranch size={16}/><div><strong>{server.label}</strong><small>{server.permission}</small></div><ChevronRight size={15}/></div>)}</section>
       </aside>
     </div>
 
-    <section className="ecosystem"><div><p className="eyebrow">MODEL ROUTER</p><h2>One assistant layer, many AI providers</h2></div><div className="provider-grid">{providers.map((p) => <div className="provider" key={p.id}><span>{p.name.slice(0, 2).toUpperCase()}</span><div><strong>{p.name}</strong><small>{p.models.join(' · ')}</small></div><i className={p.status === 'adapter-ready' ? 'ready' : ''}>{p.status === 'adapter-ready' ? 'adapter' : 'research'}</i></div>)}</div></section>
+    <section className="ecosystem"><div><p className="eyebrow">MODEL ROUTER</p><h2>One assistant layer, many AI providers</h2></div><div className="provider-grid">{providers.map((p) => {
+      const runtimeState = providerRuntimeState(p, runtimeProviders);
+      return <div className="provider" key={p.id}><span>{p.name.slice(0, 2).toUpperCase()}</span><div><strong>{p.name}</strong><small>{p.models.join(' · ')}</small></div><i className={`provider-state ${runtimeState}`}>{providerRuntimeLabel(runtimeState)}</i></div>;
+    })}</div></section>
 
     <footer><span>Master Assistant V1</span><span>Human-in-the-Loop by default</span><span>No secrets stored in UI</span></footer>
   </main>;

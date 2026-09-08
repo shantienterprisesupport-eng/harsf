@@ -19,6 +19,7 @@ function loadLocalEnv() {
 }
 
 function normalizeHttpBaseUrl(value) {
+  if (!value) return null;
   try {
     const parsed = new URL(value);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
@@ -31,21 +32,31 @@ function normalizeHttpBaseUrl(value) {
 loadLocalEnv();
 
 const port = Number(process.env.AI_GATEWAY_PORT || 8787);
-const openAiModel = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
-const anthropicModel = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
-const deepSeekModel = process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash';
-const xaiModel = process.env.XAI_MODEL || 'grok-4.6';
-const omniRouteBaseUrl = normalizeHttpBaseUrl(process.env.OMNIROUTE_BASE_URL || 'http://127.0.0.1:20128/v1');
-const omniRouteModel = (process.env.OMNIROUTE_MODEL || '').trim();
 const requestedProvider = process.env.AI_PROVIDER || 'auto';
-const providerConfig = { omniRouteModel, omniRouteBaseUrl };
 const providerModels = {
-  omniroute: omniRouteModel,
-  anthropic: anthropicModel,
-  openai: openAiModel,
-  deepseek: deepSeekModel,
-  xai: xaiModel,
+  omniroute: (process.env.OMNIROUTE_MODEL || '').trim(),
+  anthropic: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5',
+  openai: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+  deepseek: process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash',
+  xai: process.env.XAI_MODEL || 'grok-4.6',
+  alibaba: process.env.ALIBABA_MODEL || 'qwen3.8-max',
+  zhipu: process.env.ZHIPU_MODEL || 'glm-5.2',
+  moonshot: process.env.MOONSHOT_MODEL || 'kimi-k2.6',
+  minimax: process.env.MINIMAX_MODEL || 'MiniMax-M2.7',
+  hyperclova: process.env.HYPERCLOVA_MODEL || 'HCX-005',
+  upstage: process.env.UPSTAGE_MODEL || 'solar-pro4',
 };
+const providerBaseUrls = {
+  omniroute: normalizeHttpBaseUrl(process.env.OMNIROUTE_BASE_URL || 'http://127.0.0.1:20128/v1'),
+  alibaba: normalizeHttpBaseUrl(process.env.ALIBABA_BASE_URL || ''),
+  zhipu: normalizeHttpBaseUrl(process.env.ZHIPU_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4'),
+  moonshot: normalizeHttpBaseUrl(process.env.MOONSHOT_BASE_URL || 'https://api.moonshot.cn/v1'),
+  minimax: normalizeHttpBaseUrl(process.env.MINIMAX_BASE_URL || 'https://api.minimax.io/v1'),
+  hyperclova: normalizeHttpBaseUrl(process.env.HYPERCLOVA_BASE_URL || 'https://clovastudio.stream.ntruss.com/v1/openai'),
+  upstage: normalizeHttpBaseUrl(process.env.UPSTAGE_BASE_URL || 'https://api.upstage.ai/v1'),
+};
+const providerConfig = { baseUrls: providerBaseUrls, models: providerModels };
+
 const systemPrompt = `You are the HARSF Master AI Assistant for a Human CEO.
 Reply in the user's language (Hindi, Hinglish, Odia, or English), using simple concise wording.
 Your job is to understand goals, coordinate HARSF/L GenZ/n8n and connected tools, break work into safe next steps, and report progress using DONE / DOING / BLOCKED / NEXT when useful.
@@ -86,7 +97,7 @@ async function callAnthropic(message) {
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      model: anthropicModel,
+      model: providerModels.anthropic,
       max_tokens: 800,
       system: systemPrompt,
       messages: [{ role: 'user', content: message }],
@@ -111,7 +122,7 @@ async function callOpenAI(message) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: openAiModel,
+      model: providerModels.openai,
       input: [
         { role: 'system', content: [{ type: 'input_text', text: systemPrompt }] },
         { role: 'user', content: [{ type: 'input_text', text: message }] },
@@ -127,8 +138,8 @@ async function callOpenAI(message) {
   return data.output_text || 'No response returned.';
 }
 
-async function callOpenAICompatible({ url, apiKey, model, message, providerName }) {
-  const apiResponse = await fetch(url, {
+async function callOpenAICompatible({ baseUrl, apiKey, model, message, providerName }) {
+  const apiResponse = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -152,42 +163,70 @@ async function callOpenAICompatible({ url, apiKey, model, message, providerName 
   return typeof text === 'string' && text.trim() ? text.trim() : 'No response returned.';
 }
 
-function callOmniRoute(message) {
-  return callOpenAICompatible({
-    url: `${omniRouteBaseUrl}/chat/completions`,
-    apiKey: process.env.OMNIROUTE_API_KEY,
-    model: omniRouteModel,
-    message,
-    providerName: 'OmniRoute',
-  });
-}
+const compatibleProviders = {
+  omniroute: {
+    key: 'OMNIROUTE_API_KEY',
+    label: 'OmniRoute',
+    baseUrl: () => providerBaseUrls.omniroute,
+  },
+  deepseek: {
+    key: 'DEEPSEEK_API_KEY',
+    label: 'DeepSeek',
+    baseUrl: () => 'https://api.deepseek.com',
+  },
+  xai: {
+    key: 'XAI_API_KEY',
+    label: 'xAI',
+    baseUrl: () => 'https://api.x.ai/v1',
+  },
+  alibaba: {
+    key: 'ALIBABA_DASHSCOPE_API_KEY',
+    label: 'Alibaba Cloud Model Studio',
+    baseUrl: () => providerBaseUrls.alibaba,
+  },
+  zhipu: {
+    key: 'ZHIPU_API_KEY',
+    label: 'Zhipu GLM',
+    baseUrl: () => providerBaseUrls.zhipu,
+  },
+  moonshot: {
+    key: 'MOONSHOT_API_KEY',
+    label: 'Moonshot Kimi',
+    baseUrl: () => providerBaseUrls.moonshot,
+  },
+  minimax: {
+    key: 'MINIMAX_API_KEY',
+    label: 'MiniMax',
+    baseUrl: () => providerBaseUrls.minimax,
+  },
+  hyperclova: {
+    key: 'HYPERCLOVA_API_KEY',
+    label: 'HyperCLOVA X',
+    baseUrl: () => providerBaseUrls.hyperclova,
+  },
+  upstage: {
+    key: 'UPSTAGE_API_KEY',
+    label: 'Upstage Solar',
+    baseUrl: () => providerBaseUrls.upstage,
+  },
+};
 
-function callDeepSeek(message) {
+function callCompatibleProvider(provider, message) {
+  const spec = compatibleProviders[provider];
+  if (!spec) throw new Error('provider-not-supported');
   return callOpenAICompatible({
-    url: 'https://api.deepseek.com/chat/completions',
-    apiKey: process.env.DEEPSEEK_API_KEY,
-    model: deepSeekModel,
+    baseUrl: spec.baseUrl(),
+    apiKey: process.env[spec.key],
+    model: providerModel(provider),
     message,
-    providerName: 'DeepSeek',
-  });
-}
-
-function callXAI(message) {
-  return callOpenAICompatible({
-    url: 'https://api.x.ai/v1/chat/completions',
-    apiKey: process.env.XAI_API_KEY,
-    model: xaiModel,
-    message,
-    providerName: 'xAI',
+    providerName: spec.label,
   });
 }
 
 async function callProvider(provider, message) {
-  if (provider === 'omniroute') return callOmniRoute(message);
   if (provider === 'anthropic') return callAnthropic(message);
   if (provider === 'openai') return callOpenAI(message);
-  if (provider === 'deepseek') return callDeepSeek(message);
-  if (provider === 'xai') return callXAI(message);
+  if (compatibleProviders[provider]) return callCompatibleProvider(provider, message);
   throw new Error('provider-not-supported');
 }
 
@@ -201,7 +240,7 @@ createServer(async (request, response) => {
       model: providerModel(provider),
       configured: isConfigured(provider),
       providers: providerHealthSnapshot(provider, process.env, providerConfig, providerModels),
-      ...(provider === 'omniroute' ? { router: 'OmniRoute', baseUrl: omniRouteBaseUrl } : {}),
+      ...(provider === 'omniroute' ? { router: 'OmniRoute', baseUrl: providerBaseUrls.omniroute } : {}),
     });
   }
   if (request.method !== 'POST' || request.url !== '/api/ceo-chat') {

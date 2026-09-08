@@ -35,7 +35,10 @@ if (Get-Command npm -ErrorAction SilentlyContinue) { Done "npm available" }
 else { Blocked "npm not found" "Install Node.js/npm." }
 
 $envFile = Join-Path (Get-Location) '.env.local'
-$directProviderKeys = @('ANTHROPIC_API_KEY','OPENAI_API_KEY','DEEPSEEK_API_KEY','XAI_API_KEY')
+$directProviderKeys = @(
+  'ANTHROPIC_API_KEY','OPENAI_API_KEY','DEEPSEEK_API_KEY','XAI_API_KEY',
+  'ZHIPU_API_KEY','MOONSHOT_API_KEY','MINIMAX_API_KEY','HYPERCLOVA_API_KEY','UPSTAGE_API_KEY'
+)
 $configuredProviders = New-Object System.Collections.Generic.List[string]
 if (Test-Path $envFile) {
   Done ".env.local exists"
@@ -50,6 +53,14 @@ if (Test-Path $envFile) {
     if ($value) { $configuredProviders.Add($key.Replace('_API_KEY','')) }
   }
 
+  $alibabaKey = Get-EnvValue 'ALIBABA_DASHSCOPE_API_KEY' $lines
+  $alibabaBase = Get-EnvValue 'ALIBABA_BASE_URL' $lines
+  if ($alibabaKey -and $alibabaBase) {
+    $configuredProviders.Add('ALIBABA/QWEN')
+  } elseif ($alibabaKey -or ($aiProvider -in @('alibaba','qwen','dashscope'))) {
+    Blocked "Alibaba/Qwen configuration is incomplete" "Set ALIBABA_DASHSCOPE_API_KEY and the matching region/workspace ALIBABA_BASE_URL in .env.local."
+  }
+
   $omniKey = Get-EnvValue 'OMNIROUTE_API_KEY' $lines
   $omniModel = Get-EnvValue 'OMNIROUTE_MODEL' $lines
   $omniConfigured = [bool]($omniKey -and $omniModel)
@@ -61,7 +72,7 @@ if (Test-Path $envFile) {
   }
 
   if ($configuredProviders.Count -gt 0) {
-    Done ("Direct AI provider credential present for: " + ($configuredProviders -join ', ') + " (value hidden)")
+    Done ("Direct AI provider credential/config present for: " + ($configuredProviders -join ', ') + " (secret values hidden)")
   }
   if (($configuredProviders.Count -eq 0) -and (-not $omniConfigured)) {
     Blocked "No supported live AI route/provider is configured in .env.local" "Configure OmniRoute or add one authorized direct provider key locally; never commit it."

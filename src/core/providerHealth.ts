@@ -15,6 +15,12 @@ const gatewayIds: Record<string, string> = {
   claude: 'claude',
   deepseek: 'deepseek',
   grok: 'grok',
+  alibaba: 'alibaba',
+  zhipu: 'zhipu',
+  moonshot: 'moonshot',
+  minimax: 'minimax',
+  naver: 'naver',
+  upstage: 'upstage',
 };
 
 export function providerRuntimeState(provider: Provider, runtime: RuntimeProviderHealth[]): ProviderRuntimeState {

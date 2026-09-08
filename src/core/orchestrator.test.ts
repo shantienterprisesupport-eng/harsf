@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { classifyGoal, decideTask, planGoal, requiresHumanApproval, summarizeWorkflow } from './orchestrator';
+import { buildLocalAssistantReply, classifyGoal, decideTask, planGoal, requiresHumanApproval, summarizeWorkflow } from './orchestrator';
 
 describe('human approval policy', () => {
   it('blocks code changes and bug fixes for Human CEO decision', () => {
@@ -26,6 +26,16 @@ describe('Master Assistant routing', () => {
   it('recognizes software build goals', () => expect(classifyGoal('L GenZ app banao')).toBe('build'));
   it('recognizes automation goals', () => expect(classifyGoal('n8n WhatsApp workflow connect karo')).toBe('automation'));
   it('uses general mode for normal assistant tasks', () => expect(classifyGoal('mera status summarize karo')).toBe('general'));
+
+  it('creates a goal-specific local app reply instead of one fixed fallback', () => {
+    const inventoryTasks = planGoal('inventory app banao');
+    const bookingTasks = planGoal('booking app banao');
+    const inventoryReply = buildLocalAssistantReply('inventory app banao', inventoryTasks, 'provider offline');
+    const bookingReply = buildLocalAssistantReply('booking app banao', bookingTasks, 'provider offline');
+    expect(inventoryReply).toContain('inventory app banao');
+    expect(bookingReply).toContain('booking app banao');
+    expect(inventoryReply).not.toBe(bookingReply);
+  });
 });
 
 describe('AI CEO workflow', () => {
@@ -53,7 +63,7 @@ describe('AI CEO workflow', () => {
     const tasks = planGoal('build inventory app');
     const status = summarizeWorkflow(tasks, true);
     expect(status.done).toContain('workflow');
-    expect(status.doing).toContain('Define requirements');
+    expect(status.doing).toContain('Define app requirements');
     expect(status.blocked).toContain('approval');
     expect(status.next).toBeTruthy();
   });

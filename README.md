@@ -7,7 +7,8 @@ Human-CEO-controlled multi-agent software factory. A user can describe an app in
 - Responsive voice/text CEO chat interface
 - AI CEO task planner for Product, CTO, UI/UX, Developer, Database, QA, Security, BugFix, and Code Review agents
 - Human approval queue and approve/reject decisions
-- Live AI gateway support for OpenAI/ChatGPT, Claude, DeepSeek, and xAI Grok when the corresponding authorized API key is configured
+- Live AI gateway support for OmniRoute, OpenAI/ChatGPT, Claude, DeepSeek, and xAI Grok when the corresponding authorized configuration is present
+- OmniRoute can sit in front of HARSF as the preferred smart routing/fallback layer while direct providers remain available as explicit alternatives
 - Provider registry/adapters for Alibaba/Qwen, Zhipu/GLM, Moonshot/Kimi, MiniMax, HyperCLOVA X, Solar, and research-only providers
 - MCP connection contract for scoped local Git, GitHub, and vector memory
 - Unit tests for approval policy and agent delegation
@@ -16,7 +17,11 @@ Provider names in the UI mean the integration boundary is implemented, not that 
 
 ## Live provider selection
 
-Set `AI_PROVIDER` in `.env.local` to `auto`, `openai`, `claude`, `deepseek`, or `grok`. In `auto` mode HARSF uses the first configured provider in this order: Claude, OpenAI, DeepSeek, then xAI Grok. Real API keys stay only in `.env.local` and must never be committed.
+Set `AI_PROVIDER` in `.env.local` to `auto`, `omniroute`, `openai`, `claude`, `deepseek`, or `grok`.
+
+When OmniRoute is configured with `OMNIROUTE_API_KEY`, a valid `OMNIROUTE_BASE_URL`, and `OMNIROUTE_MODEL`, `auto` mode prefers OmniRoute first so its own routing/fallback rules can choose among providers. If OmniRoute is not fully configured, HARSF falls back to the first configured direct provider in this order: Claude, OpenAI, DeepSeek, then xAI Grok.
+
+The default OmniRoute base URL is `http://127.0.0.1:20128/v1`. Set `OMNIROUTE_MODEL` to the model, alias, wildcard route, or combo you configured in the OmniRoute dashboard. Real API keys stay only in `.env.local` and must never be committed.
 
 ## HARSF Doctor
 

@@ -10,6 +10,11 @@ function Blocked([string]$message, [string]$nextStep = '') {
   $blocked.Add($message)
   if ($nextStep) { $next.Add($nextStep) }
 }
+function Get-EnvValue([string]$name, [string[]]$lines) {
+  $line = $lines | Where-Object { $_ -match "^$name=.*" } | Select-Object -First 1
+  if ($null -eq $line) { return '' }
+  return (($line -replace "^$name=", '').Trim())
+}
 
 Write-Host "HARSF DOCTOR" -ForegroundColor Cyan
 Write-Host "Read-only diagnostics: no secrets, installs, starts, merges, deploys, or writes are performed." -ForegroundColor DarkGray
@@ -30,17 +35,37 @@ if (Get-Command npm -ErrorAction SilentlyContinue) { Done "npm available" }
 else { Blocked "npm not found" "Install Node.js/npm." }
 
 $envFile = Join-Path (Get-Location) '.env.local'
-$providerKeys = @('ANTHROPIC_API_KEY','OPENAI_API_KEY','DEEPSEEK_API_KEY','XAI_API_KEY')
+$directProviderKeys = @('ANTHROPIC_API_KEY','OPENAI_API_KEY','DEEPSEEK_API_KEY','XAI_API_KEY')
 $configuredProviders = New-Object System.Collections.Generic.List[string]
 if (Test-Path $envFile) {
   Done ".env.local exists"
   $lines = Get-Content $envFile
-  foreach ($key in $providerKeys) {
-    $match = $lines | Where-Object { $_ -match "^$key=.+" } | Select-Object -First 1
-    if ($match) { $configuredProviders.Add($key.Replace('_API_KEY','')) }
+
+  $aiProvider = Get-EnvValue 'AI_PROVIDER' $lines
+  if (-not $aiProvider) { $aiProvider = 'auto' }
+  else { $aiProvider = $aiProvider.ToLowerInvariant() }
+
+  foreach ($key in $directProviderKeys) {
+    $value = Get-EnvValue $key $lines
+    if ($value) { $configuredProviders.Add($key.Replace('_API_KEY','')) }
   }
-  if ($configuredProviders.Count -gt 0) { Done ("AI provider credential present for: " + ($configuredProviders -join ', ') + " (value hidden)") }
-  else { Blocked "No supported live provider credential detected in .env.local" "Add one authorized provider key locally; never commit it." }
+
+  $omniKey = Get-EnvValue 'OMNIROUTE_API_KEY' $lines
+  $omniModel = Get-EnvValue 'OMNIROUTE_MODEL' $lines
+  $omniConfigured = [bool]($omniKey -and $omniModel)
+
+  if ($omniConfigured) {
+    Done "OmniRoute smart router configured (key hidden / route: $omniModel)"
+  } elseif (($aiProvider -eq 'omniroute') -or ($aiProvider -eq 'omni') -or $omniKey -or $omniModel) {
+    Blocked "OmniRoute configuration is incomplete" "Set both OMNIROUTE_API_KEY and OMNIROUTE_MODEL in .env.local."
+  }
+
+  if ($configuredProviders.Count -gt 0) {
+    Done ("Direct AI provider credential present for: " + ($configuredProviders -join ', ') + " (value hidden)")
+  }
+  if (($configuredProviders.Count -eq 0) -and (-not $omniConfigured)) {
+    Blocked "No supported live AI route/provider is configured in .env.local" "Configure OmniRoute or add one authorized direct provider key locally; never commit it."
+  }
 } else {
   Blocked ".env.local not found" "Copy .env.example to .env.local and add only authorized local credentials."
 }

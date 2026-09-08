@@ -44,12 +44,12 @@ export function planGoal(goal: string): WorkflowTask[] {
           ['review', 'Review change and release decision', 'critical'],
         ] as const
       : [
-          ['product', 'Define requirements', 'low'],
-          ['cto', 'Design architecture', 'medium'],
-          ['ux', 'Prepare user interface', 'medium'],
-          ['developer', 'Implement code change', 'high'],
-          ['qa', 'Run QA and regression tests', 'medium'],
-          ['security', 'Review security and secrets', 'high'],
+          ['product', 'Define app requirements', 'low'],
+          ['cto', 'Design app architecture', 'medium'],
+          ['ux', 'Prepare app interface', 'medium'],
+          ['developer', 'Implement app code', 'high'],
+          ['qa', 'Run app QA and regression tests', 'medium'],
+          ['security', 'Review app security and secrets', 'high'],
           ['review', 'Review code and merge decision', 'critical'],
         ] as const;
 
@@ -61,6 +61,27 @@ export function planGoal(goal: string): WorkflowTask[] {
     status: requiresHumanApproval(risk, title) ? 'approval' : index === 0 ? 'running' : 'queued',
     reason: requiresHumanApproval(risk, title) ? 'Human CEO approval required before execution.' : undefined,
   }));
+}
+
+export function buildLocalAssistantReply(goal: string, tasks: WorkflowTask[], providerMessage?: string): string {
+  const mode = classifyGoal(goal);
+  const safeSteps = tasks
+    .filter((task) => task.status !== 'approval')
+    .slice(0, 3)
+    .map((task) => task.title.split(':')[0]);
+  const approvals = tasks.filter((task) => task.status === 'approval').length;
+  const nextSteps = safeSteps.length ? safeSteps.join(' → ') : 'Request analysis';
+  const connectionNote = providerMessage ? ` Model connection: ${providerMessage}` : '';
+
+  if (mode === 'build') {
+    return `App build request samajh gaya: “${goal}”. Workflow ready hai: ${nextSteps}. Code, security aur merge wale ${approvals} protected step${approvals === 1 ? '' : 's'} approval ke baad chalenge.${connectionNote}`;
+  }
+
+  if (mode === 'automation') {
+    return `Automation request samajh gaya: “${goal}”. Pehle ${nextSteps} hoga. ${approvals} protected step${approvals === 1 ? '' : 's'} Human CEO approval ka wait karenge.${connectionNote}`;
+  }
+
+  return `Request samajh gaya: “${goal}”. Abhi ${nextSteps} workflow active hai.${approvals ? ` ${approvals} protected step approval maangenge.` : ''}${connectionNote}`;
 }
 
 export function decideTask(task: WorkflowTask, approved: boolean): WorkflowTask {
@@ -83,8 +104,8 @@ export function summarizeWorkflow(tasks: WorkflowTask[], gatewayReady: boolean |
   if (tasks.length === 0) {
     return {
       done: 'Assistant ready',
-      doing: gatewayReady === null ? 'Checking AI connection' : 'Waiting for your command',
-      blocked: gatewayReady === false ? 'AI key not connected; planning still works' : 'None',
+      doing: gatewayReady === null ? 'Checking model connection' : 'Waiting for your command',
+      blocked: gatewayReady === false ? 'Model provider not connected; local planning active' : 'None',
       next: 'Speak or type a task',
     };
   }

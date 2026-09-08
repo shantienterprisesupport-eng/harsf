@@ -9,6 +9,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "qa": "npm run test && npm run build",
+    "doctor": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/harsf-doctor.ps1",
     "ai:gateway": "node server/ai-gateway.mjs",
     "agents:setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-agents.ps1",
     "agents:verify": "powershell -ExecutionPolicy Bypass -File scripts/verify-agents.ps1",

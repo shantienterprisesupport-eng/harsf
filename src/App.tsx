@@ -5,6 +5,7 @@ import { mcpServers } from './core/mcp';
 import { providers } from './config/providers';
 import type { ChatMessage, WorkflowTask } from './types';
 import './index.css';
+import './master-assistant.css';
 
 type RecognitionCtor = new () => { lang: string; continuous: boolean; interimResults: boolean; start(): void; stop(): void; onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null; onend: (() => void) | null };
 

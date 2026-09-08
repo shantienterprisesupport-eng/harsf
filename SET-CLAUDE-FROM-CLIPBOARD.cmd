@@ -19,7 +19,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$found=$false;" ^
   "$updated=@($lines | ForEach-Object { if($_ -match '^ANTHROPIC_API_KEY='){ $found=$true; 'ANTHROPIC_API_KEY='+$key } else { $_ } });" ^
   "if(-not $found){ $updated += 'ANTHROPIC_API_KEY='+$key };" ^
-  "if(-not ($updated -match '^ANTHROPIC_MODEL=')){ $updated += 'ANTHROPIC_MODEL=claude-sonnet-5-0' };" ^
+  "if(-not ($updated -match '^ANTHROPIC_MODEL=')){ $updated += 'ANTHROPIC_MODEL=claude-sonnet-5' };" ^
   "Set-Content -Path $path -Value $updated -Encoding UTF8;" ^
   "Set-Clipboard -Value '';" ^
   "Write-Host 'Claude key saved locally. Clipboard cleared. Nothing was uploaded to GitHub.' -ForegroundColor Green;"

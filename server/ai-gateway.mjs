@@ -11,6 +11,16 @@ function loadLocalEnv() {
   }
 }
 
+function normalizeHttpBaseUrl(value) {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return parsed.toString().replace(/\/+$/, '');
+  } catch {
+    return null;
+  }
+}
+
 loadLocalEnv();
 
 const port = Number(process.env.AI_GATEWAY_PORT || 8787);
@@ -18,6 +28,8 @@ const openAiModel = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
 const anthropicModel = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
 const deepSeekModel = process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash';
 const xaiModel = process.env.XAI_MODEL || 'grok-4.6';
+const omniRouteBaseUrl = normalizeHttpBaseUrl(process.env.OMNIROUTE_BASE_URL || 'http://127.0.0.1:20128/v1');
+const omniRouteModel = (process.env.OMNIROUTE_MODEL || '').trim();
 const requestedProvider = (process.env.AI_PROVIDER || 'auto').toLowerCase();
 const systemPrompt = `You are the HARSF Master AI Assistant for a Human CEO.
 Reply in the user's language (Hindi, Hinglish, Odia, or English), using simple concise wording.
@@ -29,10 +41,13 @@ If an integration is not connected, say exactly what is missing instead of prete
 Prefer the smallest safe next action and avoid unnecessary questions when a reasonable plan can be made.`;
 
 function activeProvider() {
+  if (requestedProvider === 'omniroute' || requestedProvider === 'omni') return 'omniroute';
   if (requestedProvider === 'anthropic' || requestedProvider === 'claude') return 'anthropic';
   if (requestedProvider === 'openai') return 'openai';
   if (requestedProvider === 'deepseek') return 'deepseek';
   if (requestedProvider === 'xai' || requestedProvider === 'grok') return 'xai';
+
+  if (isConfigured('omniroute')) return 'omniroute';
   if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
   if (process.env.OPENAI_API_KEY) return 'openai';
   if (process.env.DEEPSEEK_API_KEY) return 'deepseek';
@@ -41,6 +56,9 @@ function activeProvider() {
 }
 
 function isConfigured(provider) {
+  if (provider === 'omniroute') {
+    return Boolean(process.env.OMNIROUTE_API_KEY && omniRouteModel && omniRouteBaseUrl);
+  }
   if (provider === 'anthropic') return Boolean(process.env.ANTHROPIC_API_KEY);
   if (provider === 'openai') return Boolean(process.env.OPENAI_API_KEY);
   if (provider === 'deepseek') return Boolean(process.env.DEEPSEEK_API_KEY);
@@ -49,6 +67,7 @@ function isConfigured(provider) {
 }
 
 function providerModel(provider) {
+  if (provider === 'omniroute') return omniRouteModel || null;
   if (provider === 'anthropic') return anthropicModel;
   if (provider === 'openai') return openAiModel;
   if (provider === 'deepseek') return deepSeekModel;
@@ -57,11 +76,12 @@ function providerModel(provider) {
 }
 
 function missingCredential(provider) {
+  if (provider === 'omniroute') return 'OMNIROUTE_API_KEY, OMNIROUTE_MODEL, and a valid OMNIROUTE_BASE_URL';
   if (provider === 'anthropic') return 'ANTHROPIC_API_KEY';
   if (provider === 'openai') return 'OPENAI_API_KEY';
   if (provider === 'deepseek') return 'DEEPSEEK_API_KEY';
   if (provider === 'xai') return 'XAI_API_KEY';
-  return 'ANTHROPIC_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY, or XAI_API_KEY';
+  return 'a configured OmniRoute route or one direct AI provider credential';
 }
 
 function json(response, status, payload) {
@@ -149,6 +169,16 @@ async function callOpenAICompatible({ url, apiKey, model, message, providerName 
   return typeof text === 'string' && text.trim() ? text.trim() : 'No response returned.';
 }
 
+function callOmniRoute(message) {
+  return callOpenAICompatible({
+    url: `${omniRouteBaseUrl}/chat/completions`,
+    apiKey: process.env.OMNIROUTE_API_KEY,
+    model: omniRouteModel,
+    message,
+    providerName: 'OmniRoute',
+  });
+}
+
 function callDeepSeek(message) {
   return callOpenAICompatible({
     url: 'https://api.deepseek.com/chat/completions',
@@ -170,6 +200,7 @@ function callXAI(message) {
 }
 
 async function callProvider(provider, message) {
+  if (provider === 'omniroute') return callOmniRoute(message);
   if (provider === 'anthropic') return callAnthropic(message);
   if (provider === 'openai') return callOpenAI(message);
   if (provider === 'deepseek') return callDeepSeek(message);
@@ -186,6 +217,7 @@ createServer(async (request, response) => {
       provider,
       model: providerModel(provider),
       configured: isConfigured(provider),
+      ...(provider === 'omniroute' ? { router: 'OmniRoute', baseUrl: omniRouteBaseUrl } : {}),
     });
   }
   if (request.method !== 'POST' || request.url !== '/api/ceo-chat') {

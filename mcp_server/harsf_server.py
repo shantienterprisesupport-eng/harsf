@@ -6,6 +6,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from mcp.server import MCPServer
 
@@ -88,8 +89,14 @@ def _safe_path(relative_path: str) -> Path:
 
 
 def _looks_sensitive(text: str) -> bool:
-    lowered = text.lower()
-    return any(re.search(pattern, lowered, flags=re.IGNORECASE) for pattern in SENSITIVE_PATTERNS)
+    return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in SENSITIVE_PATTERNS)
+
+
+def _redact_sensitive_lines(text: str) -> str:
+    safe_lines: list[str] = []
+    for line in text.splitlines():
+        safe_lines.append("[REDACTED sensitive line]" if _looks_sensitive(line) else line)
+    return "\n".join(safe_lines)
 
 
 def _load_memory() -> list[dict[str, Any]]:
@@ -111,19 +118,19 @@ def _iter_project_text_files():
     for path in REPO_ROOT.rglob("*"):
         if not path.is_file():
             continue
-        rel = path.relative_to(REPO_ROOT)
-        if any(part in BLOCKED_PARTS for part in rel.parts):
+        try:
+            relative = path.relative_to(REPO_ROOT).as_posix()
+            safe = _safe_path(relative)
+        except (ValueError, OSError):
             continue
-        if path.name in BLOCKED_FILE_NAMES or path.name.startswith(".env"):
-            continue
-        if path.suffix.lower() not in ALLOWED_TEXT_SUFFIXES:
+        if safe.suffix.lower() not in ALLOWED_TEXT_SUFFIXES:
             continue
         try:
-            if path.stat().st_size > 256_000:
+            if safe.stat().st_size > 256_000:
                 continue
         except OSError:
             continue
-        yield path
+        yield safe
 
 
 @mcp.tool()
@@ -149,7 +156,7 @@ def repository_status() -> str:
 
 @mcp.tool()
 def read_project_file(path: str, max_chars: int = 12000) -> str:
-    """Read a safe text file inside the HARSF repository; secrets and generated folders are blocked."""
+    """Read a safe text file inside HARSF; secret files are blocked and sensitive-looking lines are redacted."""
     target = _safe_path(path)
     if not target.exists() or not target.is_file():
         raise ValueError("File not found.")
@@ -157,12 +164,12 @@ def read_project_file(path: str, max_chars: int = 12000) -> str:
         raise ValueError("Only normal project text/code files can be read.")
     max_chars = max(500, min(int(max_chars), 20000))
     text = target.read_text(encoding="utf-8", errors="replace")
-    return text[:max_chars]
+    return _redact_sensitive_lines(text)[:max_chars]
 
 
 @mcp.tool()
 def search_project_text(query: str, max_results: int = 20) -> list[dict[str, Any]]:
-    """Search normal HARSF project text/code files without reading secret or generated directories."""
+    """Search normal HARSF project files without reading secret/generated directories or returning sensitive-looking lines."""
     needle = query.strip().lower()
     if not needle:
         raise ValueError("Search query is required.")
@@ -177,7 +184,7 @@ def search_project_text(query: str, max_results: int = 20) -> list[dict[str, Any
         except OSError:
             continue
         for line_number, line in enumerate(lines, start=1):
-            if needle in line.lower():
+            if needle in line.lower() and not _looks_sensitive(line):
                 results.append(
                     {
                         "path": path.relative_to(REPO_ROOT).as_posix(),
@@ -192,7 +199,7 @@ def search_project_text(query: str, max_results: int = 20) -> list[dict[str, Any
 
 @mcp.tool()
 def remember_project_note(title: str, note: str) -> dict[str, Any]:
-    """Store one non-sensitive HARSF project note locally. Secrets, OTPs, credentials, and payment data are rejected."""
+    """Store one non-sensitive HARSF project note locally; credentials, OTPs and payment secrets are rejected."""
     title = title.strip()
     note = note.strip()
     if not title or not note:
@@ -204,7 +211,7 @@ def remember_project_note(title: str, note: str) -> dict[str, Any]:
 
     items = _load_memory()
     entry = {
-        "id": f"note-{len(items) + 1}",
+        "id": f"note-{uuid4().hex[:12]}",
         "title": title,
         "note": note,
         "created_at": datetime.now(timezone.utc).isoformat(),

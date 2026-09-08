@@ -7,9 +7,10 @@ This is the repository-scoped MCP server for HARSF. It uses the official MCP Pyt
 - `repository_status` — read-only `git status --short`
 - `read_project_file` — reads normal project text/code files inside HARSF only
 - `search_project_text` — literal search across normal project files
-- `remember_project_note` — stores a non-sensitive local project note
-- `recall_project_notes` — recalls local project notes
-- `memory_status` — reports memory status without note contents
+- `remember_project_note` — stores a non-sensitive local project note and indexes it semantically when local Ollama is available
+- `recall_project_notes` — keyword recall from local project notes
+- `semantic_recall_project_notes` — meaning-based recall using local Ollama embeddings
+- `memory_status` — reports memory/vector status without note contents
 
 ## Safety boundaries
 
@@ -17,10 +18,22 @@ This is the repository-scoped MCP server for HARSF. It uses the official MCP Pyt
 - `.env`, `.env.local`, credential files, `.git`, `.venv`, `node_modules`, generated folders and local memory storage are blocked from read/search.
 - Paths that resolve outside the repository are rejected, including symlink escapes.
 - Sensitive-looking lines are redacted from file reads and omitted from search results.
-- OTPs, passwords, API keys, access tokens, payment secrets and similar sensitive data are rejected from project memory.
+- OTPs, passwords, API keys, access tokens, payment secrets and similar sensitive data are rejected from project memory and embeddings.
 - The only Git command is the fixed read-only `git status --short`; arbitrary shell commands are not exposed.
 - Local memory lives under `.harsf-memory/` and is ignored by Git.
-- Vector memory is not enabled yet; this PR is the safe local memory foundation.
+- Semantic vectors are stored locally in `.harsf-memory/vectors.sqlite3`.
+- Ollama embedding calls are restricted to loopback hosts (`localhost`, `127.0.0.1`, or `::1`). Remote embedding URLs are rejected in this phase.
+
+## Semantic memory
+
+HARSF uses Ollama's current `/api/embed` endpoint. Configure locally:
+
+```text
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_EMBED_MODEL=all-minilm
+```
+
+If Ollama or the embedding model is unavailable, normal project-note storage still works; the note simply reports `semantic_indexed: false`.
 
 ## Windows setup
 

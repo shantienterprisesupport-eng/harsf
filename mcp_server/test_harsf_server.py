@@ -16,7 +16,7 @@ class HarsfMcpSafetyTests(unittest.TestCase):
 
     def test_sensitive_text_detection(self):
         self.assertTrue(_looks_sensitive("OTP 123456"))
-        self.assertTrue(_looks_sensitive("api key sk-exampleexampleexample"))
+        self.assertTrue(_looks_sensitive("api key TEST_PLACEHOLDER"))
         self.assertFalse(_looks_sensitive("Fix the n8n intake workflow"))
 
     def test_cosine_similarity(self):

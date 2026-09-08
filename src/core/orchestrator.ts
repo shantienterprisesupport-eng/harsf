@@ -14,7 +14,7 @@ export const agents: Agent[] = [
 
 const protectedAction = /(bug.?fix|code change|merge|deploy|secret|credential|api.?key|payment|purchase|migration|delete|production|publish|send money)/i;
 const appArtifact = /(app|website|web app|software|dashboard|portal)/i;
-const appCreation = /(banao|bana do|banana|build|create|make|develop|ready karo|taiyar karo)/i;
+const appCreation = /(banao|bana do|banana|bnao|bna do|bnana|\bbna\b|build|create|make|develop|ready karo|taiyar karo)/i;
 
 export function requiresHumanApproval(risk: Risk, action: string): boolean {
   return protectedAction.test(action) || risk === 'high' || risk === 'critical';
@@ -23,12 +23,12 @@ export function requiresHumanApproval(risk: Risk, action: string): boolean {
 export type GoalMode = 'build' | 'automation' | 'general';
 
 export function isAppDraftGoal(goal: string): boolean {
-  return appArtifact.test(goal) && appCreation.test(goal) && !/(merge|deploy|production|payment|purchase|api.?key|secret|credential|delete)/i.test(goal);
+  return appArtifact.test(goal) && appCreation.test(goal) && !/(merge|deploy|production|payment|purchase|api.?key|secret|credential|delete|publish)/i.test(goal);
 }
 
 export function classifyGoal(goal: string): GoalMode {
   if (/(n8n|automation|workflow|whatsapp|gmail|email|calendar|webhook|api connect|integrat)/i.test(goal)) return 'automation';
-  if (/(build|banao|bana do|create|app|website|code|software|fix|bug|feature|ui|dashboard)/i.test(goal)) return 'build';
+  if (/(build|banao|bana do|bnao|bna do|bnana|\bbna\b|create|app|website|code|software|fix|bug|feature|ui|dashboard)/i.test(goal)) return 'build';
   return 'general';
 }
 

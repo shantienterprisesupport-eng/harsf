@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildLocalAssistantReply, classifyGoal, decideTask, planGoal, requiresHumanApproval, summarizeWorkflow } from './orchestrator';
+import { buildLocalAssistantReply, classifyGoal, decideTask, isAppDraftGoal, planGoal, requiresHumanApproval, summarizeWorkflow } from './orchestrator';
 
 describe('human approval policy', () => {
   it('blocks code changes and bug fixes for Human CEO decision', () => {
@@ -24,8 +24,22 @@ describe('human approval policy', () => {
 
 describe('Master Assistant routing', () => {
   it('recognizes software build goals', () => expect(classifyGoal('L GenZ app banao')).toBe('build'));
+  it('recognizes Hinglish shorthand build goals', () => expect(classifyGoal('booking app bna')).toBe('build'));
   it('recognizes automation goals', () => expect(classifyGoal('n8n WhatsApp workflow connect karo')).toBe('automation'));
   it('uses general mode for normal assistant tasks', () => expect(classifyGoal('mera status summarize karo')).toBe('general'));
+
+  it('recognizes a safe new-app request for direct draft creation', () => {
+    expect(isAppDraftGoal('simple booking app banao')).toBe(true);
+    expect(isAppDraftGoal('booking app bna')).toBe(true);
+    expect(isAppDraftGoal('create a school dashboard')).toBe(true);
+  });
+
+  it('does not auto-run protected or non-app build work', () => {
+    expect(isAppDraftGoal('booking app deploy karo')).toBe(false);
+    expect(isAppDraftGoal('booking app banao aur API key add karo')).toBe(false);
+    expect(isAppDraftGoal('booking app banao aur publish karo')).toBe(false);
+    expect(isAppDraftGoal('existing bug fix karo')).toBe(false);
+  });
 
   it('creates a goal-specific local app reply instead of one fixed fallback', () => {
     const inventoryTasks = planGoal('inventory app banao');

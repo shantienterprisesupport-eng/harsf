@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
-import { readFileSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { spawn } from 'node:child_process';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { resolve, relative } from 'node:path';
 
 function loadLocalEnv() {
   const file = resolve(process.cwd(), '.env.local');
@@ -23,6 +24,8 @@ function normalizeHttpBaseUrl(value) {
 
 loadLocalEnv();
 
+const repoRoot = resolve(process.cwd());
+const appDraftRoot = resolve(repoRoot, '.harsf-runtime', 'app-drafts');
 const port = Number(process.env.AI_GATEWAY_PORT || 8787);
 const openAiModel = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
 const anthropicModel = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
@@ -31,6 +34,7 @@ const xaiModel = process.env.XAI_MODEL || 'grok-4.6';
 const omniRouteBaseUrl = normalizeHttpBaseUrl(process.env.OMNIROUTE_BASE_URL || 'http://127.0.0.1:20128/v1');
 const omniRouteModel = (process.env.OMNIROUTE_MODEL || '').trim();
 const requestedProvider = (process.env.AI_PROVIDER || 'auto').toLowerCase();
+let appDraftBusy = false;
 
 const systemPrompt = `You are HARSF Master AI Assistant for a Human CEO.
 Reply in the user's language (Hindi, Hinglish, Odia, or English) and adapt naturally to each message. Do not repeat a canned answer.
@@ -38,9 +42,13 @@ You are an app-builder and automation orchestrator, not only a planner. For app 
 Use the supplied conversation history and current HARSF workflow so follow-up questions stay contextual.
 When useful, report DONE / DOING / BLOCKED / NEXT, but do not force those labels into every reply.
 Never claim that you executed, changed, sent, paid, deployed, deleted, merged, published, connected, or tested anything unless the system actually performed that action and returned evidence.
-Read-only inspection, planning, summarization, and safe analysis may proceed without approval.
-Require explicit Human CEO approval before payments or purchases, credentials/secrets/API keys, code-changing execution, database migrations, destructive actions, sending external messages, merging, publishing, or deployment.
+Read-only inspection, planning, summarization, isolated app-draft creation, and safe analysis may proceed without approval.
+Require explicit Human CEO approval before payments or purchases, credentials/secrets/API keys, tracked-repository code changes, database migrations, destructive actions, sending external messages, merging, publishing, or deployment.
 If an integration is not connected, say exactly what is missing. Prefer concrete next work over generic advice and avoid unnecessary questions.`;
+
+const protectedExecution = /(password|passcode|otp|api[ _-]?key|access[ _-]?token|secret|credential|payment|purchase|\bbuy\b|\bpay\b|delete|destroy|wipe|format|merge|deploy|publish|production|database migration|db migration|send money)/i;
+const appBuildIntent = /(app|website|web app|software|dashboard|portal)/i;
+const createIntent = /(banao|bana do|banana|build|create|make|develop|ready karo|taiyar karo)/i;
 
 function requestedProviderName() {
   if (requestedProvider === 'omni') return 'omniroute';
@@ -82,6 +90,21 @@ function missingCredential(provider) {
   return 'a configured OmniRoute route or one direct AI provider credential';
 }
 
+function providerExecutionEnv(provider) {
+  if (provider === 'omniroute') {
+    return {
+      PRAISONAI_MODEL: omniRouteModel,
+      OPENAI_BASE_URL: omniRouteBaseUrl,
+      OPENAI_API_KEY: process.env.OMNIROUTE_API_KEY || 'local-omniroute',
+    };
+  }
+  if (provider === 'anthropic') return { PRAISONAI_MODEL: `anthropic/${anthropicModel}` };
+  if (provider === 'openai') return { PRAISONAI_MODEL: openAiModel };
+  if (provider === 'deepseek') return { PRAISONAI_MODEL: `deepseek/${deepSeekModel}` };
+  if (provider === 'xai') return { PRAISONAI_MODEL: `xai/${xaiModel}` };
+  return {};
+}
+
 function json(response, status, payload) {
   response.writeHead(status, {
     'Access-Control-Allow-Origin': '*',
@@ -119,6 +142,145 @@ function buildConversation(message, history, plan) {
     ? `\n\nCurrent HARSF workflow:\n${plan.map((task, index) => `${index + 1}. ${task.title} | agent=${task.agentId} | risk=${task.risk} | status=${task.status}`).join('\n')}`
     : '';
   return [...history, { role: 'user', content: `${message}${workflow}` }];
+}
+
+function listDraftFiles() {
+  if (!existsSync(appDraftRoot)) return [];
+  const files = [];
+  const stack = [appDraftRoot];
+  while (stack.length && files.length < 400) {
+    const directory = stack.pop();
+    for (const name of readdirSync(directory)) {
+      const path = resolve(directory, name);
+      let stats;
+      try {
+        stats = statSync(path);
+      } catch {
+        continue;
+      }
+      if (stats.isDirectory()) stack.push(path);
+      else if (stats.isFile()) files.push(relative(appDraftRoot, path).replaceAll('\\', '/'));
+    }
+  }
+  return files.sort();
+}
+
+function safeProcessOutput(text) {
+  return String(text || '')
+    .replace(/\bsk-[A-Za-z0-9_-]{16,}\b/g, '[REDACTED]')
+    .replace(/\bgh[pousr]_[A-Za-z0-9_]{16,}\b/g, '[REDACTED]')
+    .replace(/\bAIza[A-Za-z0-9_-]{20,}\b/g, '[REDACTED]')
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]{24,}/gi, 'Bearer [REDACTED]')
+    .slice(-6000);
+}
+
+function runNpmScript(script, extraArgs = [], timeoutMs = 600_000, extraEnv = {}) {
+  return new Promise((resolvePromise) => {
+    const npmArgs = ['run', script, ...(extraArgs.length ? ['--', ...extraArgs] : [])];
+    const npmCli = process.env.npm_execpath;
+    const executable = npmCli ? process.execPath : process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    const args = npmCli ? [npmCli, ...npmArgs] : npmArgs;
+    const child = spawn(executable, args, {
+      cwd: repoRoot,
+      shell: false,
+      env: { ...process.env, ...extraEnv },
+      windowsHide: true,
+    });
+
+    let stdout = '';
+    let stderr = '';
+    const append = (current, chunk) => `${current}${chunk}`.slice(-20_000);
+    child.stdout?.on('data', (chunk) => { stdout = append(stdout, chunk.toString()); });
+    child.stderr?.on('data', (chunk) => { stderr = append(stderr, chunk.toString()); });
+
+    let finished = false;
+    const timer = setTimeout(() => {
+      if (finished) return;
+      child.kill();
+      finished = true;
+      resolvePromise({ ok: false, code: null, timedOut: true, stdout, stderr: `${stderr}\nCommand timed out.` });
+    }, timeoutMs);
+
+    child.on('error', (error) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      resolvePromise({ ok: false, code: null, timedOut: false, stdout, stderr: `${stderr}\n${error.message}` });
+    });
+
+    child.on('close', (code) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      resolvePromise({ ok: code === 0, code, timedOut: false, stdout, stderr });
+    });
+  });
+}
+
+async function buildAppDraft(goal) {
+  if (goal.length > 2000) {
+    return { status: 413, payload: { error: 'App build request is too large. Keep the command under 2000 characters.' } };
+  }
+  if (!appBuildIntent.test(goal) || !createIntent.test(goal)) {
+    return { status: 400, payload: { error: 'This endpoint accepts only clear new-app build requests.' } };
+  }
+  if (protectedExecution.test(goal)) {
+    return { status: 409, payload: { error: 'Protected action detected. Human CEO approval is required before merge/deploy/secret/payment/destructive execution.' } };
+  }
+  const candidates = providerCandidates();
+  if (!candidates.length) {
+    return { status: 503, payload: { error: 'App draft needs a connected model provider. Configure OmniRoute or one direct provider first.' } };
+  }
+  if (!existsSync(resolve(repoRoot, 'praison', 'app_builder_tools.py'))) {
+    return { status: 503, payload: { error: 'HARSF app-draft tools are missing from this local checkout. Pull the latest main branch first.' } };
+  }
+  if (appDraftBusy) {
+    return { status: 409, payload: { error: 'Another app draft is already running. Wait for it to finish before starting another.' } };
+  }
+
+  const provider = candidates[0];
+  appDraftBusy = true;
+  try {
+    const before = new Set(listDraftFiles());
+    const routed = await runNpmScript('ruflo:orchestrate', [goal], 300_000);
+    if (!routed.ok) {
+      return {
+        status: routed.code === 2 ? 409 : 502,
+        payload: {
+          error: routed.code === 2 ? 'Ruflo stopped at the Human CEO approval gate.' : 'Ruflo could not prepare the app build handoff.',
+          details: safeProcessOutput(`${routed.stdout}\n${routed.stderr}`),
+        },
+      };
+    }
+
+    const built = await runNpmScript('agents:run:handoff', [], 900_000, providerExecutionEnv(provider));
+    if (!built.ok) {
+      return {
+        status: 502,
+        payload: {
+          error: `App agent handoff could not finish through ${provider}. Check the configured model/provider and PraisonAI setup.`,
+          details: safeProcessOutput(`${built.stdout}\n${built.stderr}`),
+        },
+      };
+    }
+
+    const after = listDraftFiles();
+    const createdOrChanged = after.filter((path) => !before.has(path));
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        status: 'DRAFT_READY',
+        provider,
+        model: providerModel(provider),
+        files: createdOrChanged.length ? createdOrChanged : after,
+        details: safeProcessOutput(built.stdout),
+        scope: '.harsf-runtime/app-drafts only',
+      },
+    };
+  } finally {
+    appDraftBusy = false;
+  }
 }
 
 async function callAnthropic(conversation) {
@@ -235,6 +397,23 @@ async function callProvider(provider, conversation) {
   throw new Error('provider-not-supported');
 }
 
+async function readJsonBody(request, response) {
+  let raw = '';
+  for await (const chunk of request) {
+    raw += chunk;
+    if (raw.length > 80_000) {
+      json(response, 413, { error: 'Message is too large.' });
+      return null;
+    }
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    json(response, 400, { error: 'Invalid request.' });
+    return null;
+  }
+}
+
 createServer(async (request, response) => {
   if (request.method === 'OPTIONS') return json(response, 204, {});
 
@@ -247,29 +426,26 @@ createServer(async (request, response) => {
       model: providerModel(provider),
       configured: candidates.length > 0,
       providers: candidates,
+      appDraftRunner: existsSync(resolve(repoRoot, 'praison', 'app_builder_tools.py')),
+      appDraftBusy,
       ...(provider === 'omniroute' ? { router: 'OmniRoute', baseUrl: omniRouteBaseUrl } : {}),
     });
   }
 
-  if (request.method !== 'POST' || request.url !== '/api/ceo-chat') {
+  if (request.method !== 'POST' || !['/api/ceo-chat', '/api/app-draft'].includes(request.url)) {
     return json(response, 404, { error: 'Not found.' });
   }
 
-  let raw = '';
-  for await (const chunk of request) {
-    raw += chunk;
-    if (raw.length > 80000) return json(response, 413, { error: 'Message is too large.' });
-  }
-
-  let body;
-  try {
-    body = JSON.parse(raw);
-  } catch {
-    return json(response, 400, { error: 'Invalid request.' });
-  }
-
+  const body = await readJsonBody(request, response);
+  if (!body) return;
   const message = typeof body?.message === 'string' ? body.message.trim() : '';
   if (!message) return json(response, 400, { error: 'Message is required.' });
+  if (message.length > 5000) return json(response, 413, { error: 'Message is too large.' });
+
+  if (request.url === '/api/app-draft') {
+    const result = await buildAppDraft(message);
+    return json(response, result.status, result.payload);
+  }
 
   const candidates = providerCandidates();
   if (!candidates.length) {

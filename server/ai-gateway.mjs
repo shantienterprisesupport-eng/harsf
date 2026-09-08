@@ -31,34 +31,26 @@ const xaiModel = process.env.XAI_MODEL || 'grok-4.6';
 const omniRouteBaseUrl = normalizeHttpBaseUrl(process.env.OMNIROUTE_BASE_URL || 'http://127.0.0.1:20128/v1');
 const omniRouteModel = (process.env.OMNIROUTE_MODEL || '').trim();
 const requestedProvider = (process.env.AI_PROVIDER || 'auto').toLowerCase();
-const systemPrompt = `You are the HARSF Master AI Assistant for a Human CEO.
-Reply in the user's language (Hindi, Hinglish, Odia, or English), using simple concise wording.
-Your job is to understand goals, coordinate HARSF/L GenZ/n8n and connected tools, break work into safe next steps, and report progress using DONE / DOING / BLOCKED / NEXT when useful.
-Never claim that you executed, changed, sent, paid, deployed, deleted, merged, published, or connected anything unless the system actually performed that action and returned evidence.
-Read-only inspection, planning, summarization, and local test suggestions may proceed without approval.
-Require explicit Human CEO approval before payments or purchases, API keys/credentials/secrets, code or bug-fix changes, database migrations, destructive actions, sending external messages, merging, publishing, or deployment.
-If an integration is not connected, say exactly what is missing instead of pretending it is available.
-Prefer the smallest safe next action and avoid unnecessary questions when a reasonable plan can be made.`;
 
-function activeProvider() {
-  if (requestedProvider === 'omniroute' || requestedProvider === 'omni') return 'omniroute';
-  if (requestedProvider === 'anthropic' || requestedProvider === 'claude') return 'anthropic';
-  if (requestedProvider === 'openai') return 'openai';
-  if (requestedProvider === 'deepseek') return 'deepseek';
-  if (requestedProvider === 'xai' || requestedProvider === 'grok') return 'xai';
+const systemPrompt = `You are HARSF Master AI Assistant for a Human CEO.
+Reply in the user's language (Hindi, Hinglish, Odia, or English) and adapt naturally to each message. Do not repeat a canned answer.
+You are an app-builder and automation orchestrator, not only a planner. For app requests, turn the goal into concrete product, architecture, UI, implementation, QA, security, and code-review work. For automation requests, map integrations, workflow steps, tests, and failure handling.
+Use the supplied conversation history and current HARSF workflow so follow-up questions stay contextual.
+When useful, report DONE / DOING / BLOCKED / NEXT, but do not force those labels into every reply.
+Never claim that you executed, changed, sent, paid, deployed, deleted, merged, published, connected, or tested anything unless the system actually performed that action and returned evidence.
+Read-only inspection, planning, summarization, and safe analysis may proceed without approval.
+Require explicit Human CEO approval before payments or purchases, credentials/secrets/API keys, code-changing execution, database migrations, destructive actions, sending external messages, merging, publishing, or deployment.
+If an integration is not connected, say exactly what is missing. Prefer concrete next work over generic advice and avoid unnecessary questions.`;
 
-  if (isConfigured('omniroute')) return 'omniroute';
-  if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
-  if (process.env.OPENAI_API_KEY) return 'openai';
-  if (process.env.DEEPSEEK_API_KEY) return 'deepseek';
-  if (process.env.XAI_API_KEY) return 'xai';
-  return 'none';
+function requestedProviderName() {
+  if (requestedProvider === 'omni') return 'omniroute';
+  if (requestedProvider === 'claude') return 'anthropic';
+  if (requestedProvider === 'grok') return 'xai';
+  return requestedProvider;
 }
 
 function isConfigured(provider) {
-  if (provider === 'omniroute') {
-    return Boolean(process.env.OMNIROUTE_API_KEY && omniRouteModel && omniRouteBaseUrl);
-  }
+  if (provider === 'omniroute') return Boolean(omniRouteModel && omniRouteBaseUrl);
   if (provider === 'anthropic') return Boolean(process.env.ANTHROPIC_API_KEY);
   if (provider === 'openai') return Boolean(process.env.OPENAI_API_KEY);
   if (provider === 'deepseek') return Boolean(process.env.DEEPSEEK_API_KEY);
@@ -75,8 +67,14 @@ function providerModel(provider) {
   return null;
 }
 
+function providerCandidates() {
+  const normalized = requestedProviderName();
+  if (normalized !== 'auto') return isConfigured(normalized) ? [normalized] : [];
+  return ['omniroute', 'anthropic', 'openai', 'deepseek', 'xai'].filter(isConfigured);
+}
+
 function missingCredential(provider) {
-  if (provider === 'omniroute') return 'OMNIROUTE_API_KEY, OMNIROUTE_MODEL, and a valid OMNIROUTE_BASE_URL';
+  if (provider === 'omniroute') return 'OMNIROUTE_MODEL and a valid OMNIROUTE_BASE_URL';
   if (provider === 'anthropic') return 'ANTHROPIC_API_KEY';
   if (provider === 'openai') return 'OPENAI_API_KEY';
   if (provider === 'deepseek') return 'DEEPSEEK_API_KEY';
@@ -86,15 +84,44 @@ function missingCredential(provider) {
 
 function json(response, status, payload) {
   response.writeHead(status, {
-    'Access-Control-Allow-Origin': 'http://127.0.0.1:5173',
+    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Private-Network': 'true',
     'Content-Type': 'application/json; charset=utf-8',
   });
   response.end(JSON.stringify(payload));
 }
 
-async function callAnthropic(message) {
+function normalizeHistory(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .slice(-12)
+    .map((item) => ({
+      role: item?.role === 'assistant' ? 'assistant' : item?.role === 'user' ? 'user' : null,
+      content: typeof item?.content === 'string' ? item.content.trim().slice(0, 5000) : '',
+    }))
+    .filter((item) => item.role && item.content);
+}
+
+function normalizePlan(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 12).map((item) => ({
+    title: typeof item?.title === 'string' ? item.title.slice(0, 240) : 'Task',
+    agentId: typeof item?.agentId === 'string' ? item.agentId.slice(0, 80) : 'agent',
+    risk: typeof item?.risk === 'string' ? item.risk.slice(0, 30) : 'unknown',
+    status: typeof item?.status === 'string' ? item.status.slice(0, 30) : 'queued',
+  }));
+}
+
+function buildConversation(message, history, plan) {
+  const workflow = plan.length
+    ? `\n\nCurrent HARSF workflow:\n${plan.map((task, index) => `${index + 1}. ${task.title} | agent=${task.agentId} | risk=${task.risk} | status=${task.status}`).join('\n')}`
+    : '';
+  return [...history, { role: 'user', content: `${message}${workflow}` }];
+}
+
+async function callAnthropic(conversation) {
   const apiResponse = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -104,9 +131,9 @@ async function callAnthropic(message) {
     },
     body: JSON.stringify({
       model: anthropicModel,
-      max_tokens: 800,
+      max_tokens: 1200,
       system: systemPrompt,
-      messages: [{ role: 'user', content: message }],
+      messages: conversation,
     }),
   });
   const data = await apiResponse.json();
@@ -120,7 +147,7 @@ async function callAnthropic(message) {
   return text || 'No response returned.';
 }
 
-async function callOpenAI(message) {
+async function callOpenAI(conversation) {
   const apiResponse = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: {
@@ -131,9 +158,9 @@ async function callOpenAI(message) {
       model: openAiModel,
       input: [
         { role: 'system', content: [{ type: 'input_text', text: systemPrompt }] },
-        { role: 'user', content: [{ type: 'input_text', text: message }] },
+        ...conversation.map((item) => ({ role: item.role, content: [{ type: 'input_text', text: item.content }] })),
       ],
-      max_output_tokens: 800,
+      max_output_tokens: 1200,
     }),
   });
   const data = await apiResponse.json();
@@ -144,19 +171,19 @@ async function callOpenAI(message) {
   return data.output_text || 'No response returned.';
 }
 
-async function callOpenAICompatible({ url, apiKey, model, message, providerName }) {
+async function callOpenAICompatible({ url, apiKey, model, conversation, providerName }) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
   const apiResponse = await fetch(url, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({
       model,
-      max_tokens: 800,
+      max_tokens: 1200,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: message },
+        ...conversation,
       ],
     }),
   });
@@ -169,57 +196,61 @@ async function callOpenAICompatible({ url, apiKey, model, message, providerName 
   return typeof text === 'string' && text.trim() ? text.trim() : 'No response returned.';
 }
 
-function callOmniRoute(message) {
+function callOmniRoute(conversation) {
   return callOpenAICompatible({
     url: `${omniRouteBaseUrl}/chat/completions`,
     apiKey: process.env.OMNIROUTE_API_KEY,
     model: omniRouteModel,
-    message,
+    conversation,
     providerName: 'OmniRoute',
   });
 }
 
-function callDeepSeek(message) {
+function callDeepSeek(conversation) {
   return callOpenAICompatible({
     url: 'https://api.deepseek.com/chat/completions',
     apiKey: process.env.DEEPSEEK_API_KEY,
     model: deepSeekModel,
-    message,
+    conversation,
     providerName: 'DeepSeek',
   });
 }
 
-function callXAI(message) {
+function callXAI(conversation) {
   return callOpenAICompatible({
     url: 'https://api.x.ai/v1/chat/completions',
     apiKey: process.env.XAI_API_KEY,
     model: xaiModel,
-    message,
+    conversation,
     providerName: 'xAI',
   });
 }
 
-async function callProvider(provider, message) {
-  if (provider === 'omniroute') return callOmniRoute(message);
-  if (provider === 'anthropic') return callAnthropic(message);
-  if (provider === 'openai') return callOpenAI(message);
-  if (provider === 'deepseek') return callDeepSeek(message);
-  if (provider === 'xai') return callXAI(message);
+async function callProvider(provider, conversation) {
+  if (provider === 'omniroute') return callOmniRoute(conversation);
+  if (provider === 'anthropic') return callAnthropic(conversation);
+  if (provider === 'openai') return callOpenAI(conversation);
+  if (provider === 'deepseek') return callDeepSeek(conversation);
+  if (provider === 'xai') return callXAI(conversation);
   throw new Error('provider-not-supported');
 }
 
 createServer(async (request, response) => {
   if (request.method === 'OPTIONS') return json(response, 204, {});
+
   if (request.method === 'GET' && request.url === '/health') {
-    const provider = activeProvider();
+    const candidates = providerCandidates();
+    const provider = candidates[0] || 'none';
     return json(response, 200, {
       ok: true,
       provider,
       model: providerModel(provider),
-      configured: isConfigured(provider),
+      configured: candidates.length > 0,
+      providers: candidates,
       ...(provider === 'omniroute' ? { router: 'OmniRoute', baseUrl: omniRouteBaseUrl } : {}),
     });
   }
+
   if (request.method !== 'POST' || request.url !== '/api/ceo-chat') {
     return json(response, 404, { error: 'Not found.' });
   }
@@ -227,31 +258,52 @@ createServer(async (request, response) => {
   let raw = '';
   for await (const chunk of request) {
     raw += chunk;
-    if (raw.length > 20000) return json(response, 413, { error: 'Message is too large.' });
+    if (raw.length > 80000) return json(response, 413, { error: 'Message is too large.' });
   }
 
-  let message = '';
+  let body;
   try {
-    ({ message } = JSON.parse(raw));
+    body = JSON.parse(raw);
   } catch {
     return json(response, 400, { error: 'Invalid request.' });
   }
-  if (typeof message !== 'string' || !message.trim()) return json(response, 400, { error: 'Message is required.' });
 
-  const provider = activeProvider();
-  if (!isConfigured(provider)) {
+  const message = typeof body?.message === 'string' ? body.message.trim() : '';
+  if (!message) return json(response, 400, { error: 'Message is required.' });
+
+  const candidates = providerCandidates();
+  if (!candidates.length) {
+    const wanted = requestedProviderName();
     return json(response, 503, {
-      error: `AI provider is not configured. ${missingCredential(provider)} is required in .env.local.`,
+      error: wanted !== 'auto'
+        ? `AI provider ${wanted} is not configured. ${missingCredential(wanted)} is required in .env.local.`
+        : 'No model provider is connected. Configure OmniRoute or one direct provider in .env.local.',
     });
   }
 
-  try {
-    const text = await callProvider(provider, message.trim());
-    return json(response, 200, { text, provider, model: providerModel(provider) });
-  } catch {
-    return json(response, 502, { error: 'AI provider could not be reached or rejected the request.' });
+  const history = normalizeHistory(body?.history);
+  const plan = normalizePlan(body?.plan);
+  const conversation = buildConversation(message, history, plan);
+  const failures = [];
+
+  for (const provider of candidates) {
+    try {
+      const text = await callProvider(provider, conversation);
+      return json(response, 200, {
+        text,
+        provider,
+        model: providerModel(provider),
+        fallbackUsed: provider !== candidates[0],
+      });
+    } catch {
+      failures.push(provider);
+    }
   }
+
+  return json(response, 502, {
+    error: `Connected model provider request failed${failures.length > 1 ? ` for ${failures.join(', ')}` : ''}.`,
+  });
 }).listen(port, '127.0.0.1', () => {
-  const provider = activeProvider();
-  console.log(`HARSF Master AI gateway running at http://127.0.0.1:${port} using ${provider}`);
+  const candidates = providerCandidates();
+  console.log(`HARSF Master AI gateway running at http://127.0.0.1:${port} using ${candidates.join(' -> ') || 'local planning only'}`);
 });

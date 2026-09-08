@@ -16,13 +16,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "if($key -notmatch '^sk-ant-'){ Write-Host 'Clipboard does not look like an Anthropic API key. Nothing was changed.' -ForegroundColor Red; exit 3 };" ^
   "$path=Join-Path (Get-Location) '.env.local';" ^
   "$lines=if(Test-Path $path){ @(Get-Content $path) } else { @() };" ^
-  "$found=$false;" ^
-  "$updated=@($lines | ForEach-Object { if($_ -match '^ANTHROPIC_API_KEY='){ $found=$true; 'ANTHROPIC_API_KEY='+$key } else { $_ } });" ^
-  "if(-not $found){ $updated += 'ANTHROPIC_API_KEY='+$key };" ^
-  "if(-not ($updated -match '^ANTHROPIC_MODEL=')){ $updated += 'ANTHROPIC_MODEL=claude-sonnet-5' };" ^
+  "$foundKey=$false; $foundProvider=$false; $foundModel=$false;" ^
+  "$updated=@($lines | ForEach-Object {" ^
+  "  if($_ -match '^ANTHROPIC_API_KEY='){ $foundKey=$true; 'ANTHROPIC_API_KEY='+$key }" ^
+  "  elseif($_ -match '^AI_PROVIDER='){ $foundProvider=$true; 'AI_PROVIDER=anthropic' }" ^
+  "  elseif($_ -match '^ANTHROPIC_MODEL='){ $foundModel=$true; $_ }" ^
+  "  else { $_ }" ^
+  "});" ^
+  "if(-not $foundKey){ $updated += 'ANTHROPIC_API_KEY='+$key };" ^
+  "if(-not $foundProvider){ $updated += 'AI_PROVIDER=anthropic' };" ^
+  "if(-not $foundModel){ $updated += 'ANTHROPIC_MODEL=claude-sonnet-5' };" ^
   "Set-Content -Path $path -Value $updated -Encoding UTF8;" ^
   "Set-Clipboard -Value '';" ^
-  "Write-Host 'Claude key saved locally. Clipboard cleared. Nothing was uploaded to GitHub.' -ForegroundColor Green;"
+  "Write-Host 'Claude key saved locally and Claude set as primary provider. Clipboard cleared. Nothing was uploaded to GitHub.' -ForegroundColor Green;"
 
 if errorlevel 1 (
   echo.
@@ -32,7 +38,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo Claude is configured for HARSF on this laptop.
-echo Restart HARSF to use Claude.
+echo Claude is configured as the primary HARSF AI on this laptop.
+echo Restart HARSF to use Claude for app-building tasks.
 pause
 endlocal

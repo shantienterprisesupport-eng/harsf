@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "L GenZ DIRECT",
+    "slug": "lgenz-direct",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "lgenzdirect",
+    "userInterfaceStyle": "automatic",
+    "plugins": ["expo-router"],
+    "android": {"package": "com.lgenz.direct"},
+    "ios": {"bundleIdentifier": "com.lgenz.direct"}
+  }
+}

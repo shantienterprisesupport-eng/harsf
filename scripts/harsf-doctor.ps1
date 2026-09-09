@@ -3,11 +3,16 @@ Set-Location (Split-Path -Parent $PSScriptRoot)
 
 $done = New-Object System.Collections.Generic.List[string]
 $blocked = New-Object System.Collections.Generic.List[string]
+$warnings = New-Object System.Collections.Generic.List[string]
 $next = New-Object System.Collections.Generic.List[string]
 
 function Done([string]$message) { $done.Add($message) }
 function Blocked([string]$message, [string]$nextStep = '') {
   $blocked.Add($message)
+  if ($nextStep) { $next.Add($nextStep) }
+}
+function Warning([string]$message, [string]$nextStep = '') {
+  $warnings.Add($message)
   if ($nextStep) { $next.Add($nextStep) }
 }
 function Get-EnvValue([string]$name, [string[]]$lines) {
@@ -57,17 +62,17 @@ if (Test-Path $envFile) {
   if ($omniConfigured) {
     Done "OmniRoute smart router configured (key hidden / route: $omniModel)"
   } elseif (($aiProvider -eq 'omniroute') -or ($aiProvider -eq 'omni') -or $omniKey -or $omniModel) {
-    Blocked "OmniRoute configuration is incomplete" "Set both OMNIROUTE_API_KEY and OMNIROUTE_MODEL in .env.local."
+    Warning "OmniRoute configuration is incomplete" "Set both OMNIROUTE_API_KEY and OMNIROUTE_MODEL in .env.local when you want OmniRoute."
   }
 
   if ($configuredProviders.Count -gt 0) {
     Done ("Direct AI provider credential present for: " + ($configuredProviders -join ', ') + " (value hidden)")
   }
   if (($configuredProviders.Count -eq 0) -and (-not $omniConfigured)) {
-    Blocked "No supported live AI route/provider is configured in .env.local" "Configure OmniRoute or add one authorized direct provider key locally; never commit it."
+    Warning "No external live AI route/provider is configured in .env.local" "Optional: configure OmniRoute or an authorized direct provider later. Local Master AI can continue independently."
   }
 } else {
-  Blocked ".env.local not found" "Copy .env.example to .env.local and add only authorized local credentials."
+  Blocked ".env.local not found" "Copy .env.example to .env.local."
 }
 
 try {
@@ -75,9 +80,9 @@ try {
   if ($health.ok) {
     $modelText = if ($health.model) { " / $($health.model)" } else { '' }
     Done "AI gateway reachable: $($health.provider)$modelText"
-  } else { Blocked "AI gateway health response is not healthy" "Run npm run ai:gateway in a separate terminal and retry." }
+  } else { Warning "AI gateway health response is not healthy" "Run npm run ai:gateway only when you want HARSF live AI chat." }
 } catch {
-  Blocked "AI gateway is not currently reachable on 127.0.0.1:8787" "Run npm run ai:gateway in a separate terminal when you want live AI chat."
+  Warning "AI gateway is not currently reachable on 127.0.0.1:8787" "Run npm run ai:gateway only when you want HARSF live AI chat."
 }
 
 $python = Join-Path (Get-Location) '.venv\Scripts\python.exe'
@@ -95,9 +100,9 @@ else { Blocked "praison\ai_company.py is missing" "Restore the six-agent Praison
 if (Get-Command npx -ErrorAction SilentlyContinue) {
   $rufloVersion = (& npx --no-install ruflo --version 2>$null | Select-Object -First 1)
   if ($LASTEXITCODE -eq 0 -and $rufloVersion) { Done "Ruflo available locally: $rufloVersion" }
-  else { Blocked "Ruflo is not available locally without downloading" "Run npm run agents:setup when network access is allowed." }
+  else { Warning "Ruflo is not available locally without downloading" "Optional for the current local MVP: run npm run agents:setup when network access is allowed." }
 } else {
-  Blocked "npx not found, so Ruflo cannot be checked" "Install Node.js/npm."
+  Warning "npx not found, so Ruflo cannot be checked" "Install Node.js/npm before enabling Ruflo."
 }
 
 if (Get-Command docker -ErrorAction SilentlyContinue) {
@@ -107,17 +112,18 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
     if (Test-Path 'n8n\docker-compose.yml') {
       $running = (& docker compose -f 'n8n\docker-compose.yml' ps --status running --services 2>$null)
       if ($LASTEXITCODE -eq 0 -and $running) { Done ("n8n Docker services running: " + (($running | Where-Object { $_ }) -join ', ')) }
-      else { Blocked "n8n Docker services are not currently running" "Run npm run n8n:start only when you want to start n8n." }
-    } else { Blocked "n8n/docker-compose.yml is missing" "Restore the n8n runtime files from GitHub." }
+      else { Warning "n8n Docker services are not currently running" "Run npm run n8n:start only when you want to start n8n." }
+    } else { Warning "n8n/docker-compose.yml is missing" "Restore the n8n runtime files before using n8n." }
   } else {
-    Blocked "Docker command exists but the engine is not running" "Start Docker Desktop before using n8n."
+    Warning "Docker command exists but the engine is not running" "Start Docker Desktop only when you want to use n8n."
   }
 } else {
-  Blocked "Docker not found" "Install/start Docker only if you want the local n8n runtime."
+  Warning "Docker not found" "Install/start Docker only if you want the local n8n runtime."
 }
 
 if (Test-Path 'n8n\workflows\harsf-agent-intake.json') { Done "Six-agent n8n intake workflow file exists" }
-else { Blocked "Six-agent n8n intake workflow file is missing" "Restore/import the workflow before n8n execution." }
+else { Warning "Six-agent n8n intake workflow file is missing" "Restore/import the workflow before n8n execution."
+}
 
 Write-Host ""
 Write-Host "DONE ($($done.Count))" -ForegroundColor Green
@@ -125,8 +131,13 @@ foreach ($item in $done) { Write-Host "  + $item" }
 
 Write-Host ""
 Write-Host "BLOCKED ($($blocked.Count))" -ForegroundColor Yellow
-if ($blocked.Count -eq 0) { Write-Host "  + Nothing blocked" }
+if ($blocked.Count -eq 0) { Write-Host "  + Nothing core-blocking" }
 else { foreach ($item in $blocked) { Write-Host "  - $item" } }
+
+Write-Host ""
+Write-Host "WARNINGS ($($warnings.Count))" -ForegroundColor DarkYellow
+if ($warnings.Count -eq 0) { Write-Host "  + No optional warnings" }
+else { foreach ($item in $warnings) { Write-Host "  ! $item" } }
 
 Write-Host ""
 Write-Host "NEXT" -ForegroundColor Cyan

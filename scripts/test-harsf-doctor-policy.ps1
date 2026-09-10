@@ -26,7 +26,7 @@ Assert-Contains 'Blocked "npm not found"' 'npm core blocker'
 Assert-Contains 'Blocked ".env.local not found"' '.env.local core blocker'
 Assert-Contains 'Blocked ".venv is missing"' '.venv core blocker'
 Assert-Contains 'Blocked "PraisonAI is not importable from .venv"' 'PraisonAI core blocker'
-Assert-Contains 'Blocked "praison\\ai_company.py is missing"' 'PraisonAI entrypoint core blocker'
+Assert-Contains 'Blocked "praison\ai_company.py is missing"' 'PraisonAI entrypoint core blocker'
 
 # Optional integrations must remain warnings so the local MVP is not falsely reported as blocked.
 $optionalWarnings = @(

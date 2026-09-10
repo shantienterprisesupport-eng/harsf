@@ -35,6 +35,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify HARSF doctor blocking policy
+        shell: pwsh
+        run: ./scripts/test-harsf-doctor-policy.ps1
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:

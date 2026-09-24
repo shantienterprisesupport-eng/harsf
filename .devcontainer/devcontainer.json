@@ -1,0 +1,23 @@
+{
+  "name": "HARSF Browser Cloud",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12"
+    }
+  },
+  "postCreateCommand": "npm ci && python -m venv .venv && .venv/bin/python -m pip install --upgrade pip && .venv/bin/python -m pip install praisonai 'mcp>=2,<3'",
+  "postStartCommand": "npm run dev:browser > /tmp/harsf-browser.log 2>&1 &",
+  "forwardPorts": [5173],
+  "portsAttributes": {
+    "5173": {
+      "label": "HARSF Browser",
+      "onAutoForward": "openPreview",
+      "visibility": "private"
+    }
+  },
+  "remoteEnv": {
+    "AI_PROVIDER": "auto",
+    "AI_PROVIDER_ORDER": "anthropic,xai,omniroute,openai,deepseek"
+  }
+}

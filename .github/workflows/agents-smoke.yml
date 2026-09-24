@@ -11,6 +11,9 @@ on:
       - 'mcp_server/**'
       - 'n8n/**'
       - 'package.json'
+      - '.env.example'
+      - 'vite.config.ts'
+      - '.devcontainer/**'
       - '.github/workflows/agents-smoke.yml'
   pull_request:
     paths:
@@ -21,6 +24,9 @@ on:
       - 'mcp_server/**'
       - 'n8n/**'
       - 'package.json'
+      - '.env.example'
+      - 'vite.config.ts'
+      - '.devcontainer/**'
       - '.github/workflows/agents-smoke.yml'
   workflow_dispatch:
 
@@ -46,6 +52,8 @@ jobs:
           node --check scripts/ruflo-orchestrate.mjs
           node --check scripts/n8n-safe-handoff.mjs
           node --check scripts/n8n-import-workflow.mjs
+          node --check scripts/dev-browser.mjs
+          node --check scripts/run-python.mjs
           node scripts/ruflo-orchestrate.mjs --self-test
           node scripts/n8n-import-workflow.mjs --self-test
           node scripts/n8n-safe-handoff.mjs --self-test

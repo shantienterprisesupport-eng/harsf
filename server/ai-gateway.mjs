@@ -28,12 +28,17 @@ const repoRoot = resolve(process.cwd());
 const appDraftRoot = resolve(repoRoot, '.harsf-runtime', 'app-drafts');
 const port = Number(process.env.AI_GATEWAY_PORT || 8787);
 const openAiModel = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
-const anthropicModel = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
+const anthropicModel = process.env.ANTHROPIC_MODEL || 'claude-opus-5-5';
 const deepSeekModel = process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash';
-const xaiModel = process.env.XAI_MODEL || 'grok-4.6';
+const xaiModel = process.env.XAI_MODEL || 'grok-4.7';
 const omniRouteBaseUrl = normalizeHttpBaseUrl(process.env.OMNIROUTE_BASE_URL || 'http://127.0.0.1:20128/v1');
 const omniRouteModel = (process.env.OMNIROUTE_MODEL || '').trim();
 const requestedProvider = (process.env.AI_PROVIDER || 'auto').toLowerCase();
+const providerOrder = (process.env.AI_PROVIDER_ORDER || 'anthropic,xai,omniroute,openai,deepseek')
+  .split(',')
+  .map((provider) => provider.trim().toLowerCase())
+  .filter(Boolean)
+  .filter((provider, index, all) => all.indexOf(provider) === index);
 let appDraftBusy = false;
 
 const systemPrompt = `You are HARSF Master AI Assistant for a Human CEO.
@@ -78,7 +83,7 @@ function providerModel(provider) {
 function providerCandidates() {
   const normalized = requestedProviderName();
   if (normalized !== 'auto') return isConfigured(normalized) ? [normalized] : [];
-  return ['omniroute', 'anthropic', 'openai', 'deepseek', 'xai'].filter(isConfigured);
+  return providerOrder.filter(isConfigured);
 }
 
 function missingCredential(provider) {
@@ -426,6 +431,7 @@ createServer(async (request, response) => {
       model: providerModel(provider),
       configured: candidates.length > 0,
       providers: candidates,
+      providerOrder,
       appDraftRunner: existsSync(resolve(repoRoot, 'praison', 'app_builder_tools.py')),
       appDraftBusy,
       ...(provider === 'omniroute' ? { router: 'OmniRoute', baseUrl: omniRouteBaseUrl } : {}),

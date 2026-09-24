@@ -3,9 +3,9 @@ import type { Provider } from '../types';
 export const providers: Provider[] = [
   { id: 'omniroute', name: 'OmniRoute Smart Router', models: ['Configured route / combo / model'], status: 'adapter-ready', env: 'OMNIROUTE_API_KEY' },
   { id: 'openai', name: 'OpenAI / ChatGPT', models: ['Codex', 'GPT'], status: 'adapter-ready', env: 'OPENAI_API_KEY' },
-  { id: 'claude', name: 'Claude', models: ['Claude Sonnet 5'], status: 'adapter-ready', env: 'ANTHROPIC_API_KEY' },
+  { id: 'claude', name: 'Claude', models: ['Claude Opus 5.5'], status: 'adapter-ready', env: 'ANTHROPIC_API_KEY' },
   { id: 'deepseek', name: 'DeepSeek', models: ['V4-Pro', 'V4-Flash'], status: 'adapter-ready', env: 'DEEPSEEK_API_KEY' },
-  { id: 'grok', name: 'xAI Grok', models: ['Grok 4.6'], status: 'adapter-ready', env: 'XAI_API_KEY' },
+  { id: 'grok', name: 'xAI Grok', models: ['Grok 4.7'], status: 'adapter-ready', env: 'XAI_API_KEY' },
   { id: 'alibaba', name: 'Alibaba Cloud', models: ['Qwen'], status: 'adapter-ready', env: 'ALIBABA_DASHSCOPE_API_KEY' },
   { id: 'zhipu', name: 'Zhipu AI', models: ['GLM'], status: 'adapter-ready', env: 'ZHIPU_API_KEY' },
   { id: 'moonshot', name: 'Moonshot AI', models: ['Kimi'], status: 'adapter-ready', env: 'MOONSHOT_API_KEY' },

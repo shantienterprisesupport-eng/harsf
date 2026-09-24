@@ -9,7 +9,7 @@ Human-CEO-controlled multi-agent software factory. A user can describe an app in
 - Human approval queue and approve/reject decisions
 - Context-aware Master Assistant replies with model/provider failover and goal-specific local fallback
 - Live AI gateway support for OmniRoute, OpenAI/ChatGPT, Claude, DeepSeek, and xAI Grok when the corresponding authorized configuration is present
-- OmniRoute can sit in front of HARSF as the preferred smart routing/fallback layer while direct providers remain available as explicit alternatives
+- Browser-first development can run in GitHub Codespaces so the laptop mainly needs a browser; the AI gateway and app-building tools run inside the cloud workspace
 - Provider registry/adapters for Alibaba/Qwen, Zhipu/GLM, Moonshot/Kimi, MiniMax, HyperCLOVA X, Solar, and research-only providers
 - Repository-scoped MCP server with local project memory and local Ollama semantic/vector recall
 - Ruflo safe orchestration handoff into the six-agent PraisonAI team
@@ -20,11 +20,11 @@ Provider names in the UI mean the integration boundary is implemented, not that 
 
 ## Live provider selection
 
-Set `AI_PROVIDER` in `.env.local` to `auto`, `omniroute`, `openai`, `claude`, `deepseek`, or `grok`.
+Set `AI_PROVIDER` to `auto`, `omniroute`, `openai`, `claude`, `deepseek`, or `grok`.
 
-When OmniRoute has a valid `OMNIROUTE_BASE_URL` and `OMNIROUTE_MODEL`, `auto` mode prefers OmniRoute first so its own routing/fallback rules can choose among providers. `OMNIROUTE_API_KEY` is optional for a local OmniRoute endpoint that does not require bearer authentication. If OmniRoute is not configured, HARSF falls back to the first configured direct provider in this order: Claude, OpenAI, DeepSeek, then xAI Grok.
+In `auto` mode, `AI_PROVIDER_ORDER` controls failover. The browser/cloud default is `anthropic,xai,omniroute,openai,deepseek`, so Claude Opus 5.5 is primary and Grok 4.7 is the first fallback when both credentials are configured. You can change the order without changing code.
 
-The default OmniRoute base URL is `http://127.0.0.1:20128/v1`. Set `OMNIROUTE_MODEL` to the model, alias, wildcard route, or combo you configured in the OmniRoute dashboard. Real API keys stay only in `.env.local` and must never be committed.
+The default OmniRoute base URL is `http://127.0.0.1:20128/v1`. Set `OMNIROUTE_MODEL` to the model, alias, wildcard route, or combo you configured in the OmniRoute dashboard. Real API keys must stay server-side in environment variables, `.env.local`, or GitHub Codespaces secrets and must never be committed.
 
 ## HARSF Doctor
 
@@ -70,6 +70,19 @@ npm run agents:run:handoff
 ```
 
 Then review the generated draft under `.harsf-runtime/app-drafts` before approving any move into a tracked project or any execution/deployment step.
+
+## Browser-first cloud development (GitHub Codespaces)
+
+This mode keeps the heavier runtime off an older laptop. The repository stays in GitHub, the HARSF runtime runs inside a Codespace, and the laptop only needs a browser.
+
+1. Create a GitHub Codespace for this repository.
+2. Add `ANTHROPIC_API_KEY` and `XAI_API_KEY` as GitHub Codespaces secrets. Do not paste keys into source files or commit them.
+3. The dev container installs Node, Python, PraisonAI, and MCP in the cloud workspace.
+4. Run `npm run dev:browser` if the preview did not start automatically.
+5. Open the forwarded HARSF browser port (5173). The AI gateway remains bound to `127.0.0.1:8787` inside the Codespace, and Vite proxies `/api` and `/health` to it.
+6. In `auto` mode, Claude Opus 5.5 is tried first and Grok 4.7 is the first fallback.
+
+The generated app draft still stays in the isolated `.harsf-runtime/app-drafts` workspace until the Human CEO explicitly approves moving reviewed files into tracked GitHub project files. Merge and deployment remain separate approval steps.
 
 ## Run on Windows
 

@@ -1,0 +1,55 @@
+{
+  "description": "Non-secret integration registry. Example only; no accounts connected.",
+  "mode": "free-first",
+  "approval_required": true,
+  "auto_deploy": false,
+  "auto_publish": false,
+  "auto_spend": false,
+  "integrations": [
+    {
+      "id": "github",
+      "mode": "existing",
+      "status": "verify-access"
+    },
+    {
+      "id": "chatgpt-codex",
+      "mode": "external",
+      "status": "manual-authorization"
+    },
+    {
+      "id": "v0",
+      "mode": "external",
+      "status": "manual-export-or-authorization"
+    },
+    {
+      "id": "figma",
+      "mode": "external",
+      "status": "manual-authorization"
+    },
+    {
+      "id": "replit",
+      "mode": "external",
+      "status": "manual-authorization"
+    },
+    {
+      "id": "supabase",
+      "mode": "development-only",
+      "status": "project-required"
+    },
+    {
+      "id": "langgraph",
+      "mode": "local-open-source",
+      "status": "not-installed"
+    },
+    {
+      "id": "n8n",
+      "mode": "existing-local",
+      "status": "verify-locally"
+    },
+    {
+      "id": "ollama",
+      "mode": "optional-local",
+      "status": "verify-locally"
+    }
+  ]
+}

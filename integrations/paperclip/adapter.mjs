@@ -1,31 +1,26 @@
-// HARSF optional Paperclip integration boundary.
-// This module intentionally performs no network calls or subprocess execution.
-// Paperclip's official interface must be verified before a live adapter is implemented.
+// Optional Paperclip planning boundary. No external execution or network calls.
 export const PAPERCLIP_STATUS = Object.freeze({
-  provider: 'paperclip',
-  enabled: false,
-  connected: false,
-  mode: 'dry-run-only',
-  verified: false,
+  provider: 'paperclip', enabled: false, connected: false,
+  mode: 'dry-run-only', verified: false,
 });
 
-const BLOCKED = /\b(deploy|publish|merge|payment|purchase|secret|credential|otp|production|delete|remove|migrate)\b/i;
+// Conservative review triggers. These are advisory; never an authorization mechanism.
+const SENSITIVE = /\b(deploy(?:ment)?|publish|release|merge|push|commit|payment|pay|purchase|billing|spend|secret|credential|api[ -]?key|token|password|otp|production|prod|delete|remove|wipe|drop|migrat(?:e|ion)|database|db|live)\b|डिप्लॉय|पेमेंट|पासवर्ड|ओटीपी|डिलीट|मर्ज/i;
+const ROLES = Object.freeze(['CEO Planner', 'Developer', 'UI Designer', 'QA Tester', 'Security Reviewer']);
 
 export function planPaperclipHandoff({ goal, module = 'L GenZ demo' } = {}) {
-  if (typeof goal !== 'string' || !goal.trim()) {
-    throw new TypeError('A non-empty goal is required');
-  }
-  if (BLOCKED.test(goal)) {
-    return { status: 'approval-required', provider: 'paperclip', executed: false, reason: 'Sensitive operation requires Human CEO review' };
-  }
+  if (typeof goal !== 'string' || !goal.trim()) throw new TypeError('A non-empty goal is required');
+  if (typeof module !== 'string' || !module.trim()) throw new TypeError('A non-empty module is required');
+  const needsReview = SENSITIVE.test(goal) || SENSITIVE.test(module);
   return {
-    status: 'dry-run',
+    status: needsReview ? 'approval-required' : 'dry-run',
     provider: 'paperclip',
     executed: false,
-    module,
+    module: module.trim(),
     goal: goal.trim(),
-    proposedRoles: ['CEO Planner', 'Developer', 'UI Designer', 'QA Tester', 'Security Reviewer'],
+    proposedRoles: [...ROLES],
     draftRoot: '.harsf-runtime/app-drafts',
     approvalRequiredBeforeExecution: true,
+    ...(needsReview ? { reason: 'Sensitive operation requires Human CEO review' } : {}),
   };
 }
